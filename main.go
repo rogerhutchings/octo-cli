@@ -17,6 +17,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var version = "dev"
+
 const (
 	octopusGraphQLEndpoint = "https://api.octopus.energy/v1/graphql/"
 	octopusBackendEndpoint = "https://api.backend.octopus.energy/v1/graphql/"
@@ -83,7 +85,17 @@ func main() {
 		false,
 		"Join candidate Saving Sessions",
 	)
+	showVersion := flag.Bool(
+		"version",
+		false,
+		"Print version and exit",
+	)
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 

@@ -32,11 +32,12 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: linux
           GOARCH: amd64
+          VERSION: ${{ github.ref_name }}
         run: |
           mkdir -p dist
           go build \
             -trimpath \
-            -ldflags="-s -w" \
+            -ldflags="-s -w -X main.version=${VERSION}" \
             -o dist/octopus-autojoin-linux-amd64 \
             .
 
