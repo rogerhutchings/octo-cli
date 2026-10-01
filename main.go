@@ -400,10 +400,14 @@ func logCandidateSavingSessions(
 			event.ID,
 			"event_code",
 			event.Code,
+			"event_type",
+			event.EventType,
 			"start_at",
 			event.StartAt,
 			"end_at",
 			event.EndAt,
+			"capacity_status",
+			event.CapacityStatus,
 		)
 	}
 }
