@@ -6,12 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/rogerhutchings/octopus-autojoin/internal/octopus"
+	"github.com/rogerhutchings/octo-cli/internal/octopus"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -123,8 +122,8 @@ func TestRun(t *testing.T) {
 			if err := client.Authenticate(ctx, "test-api-key"); err != nil {
 				t.Fatal(err)
 			}
-			var logs bytes.Buffer
-			err := Run(ctx, slog.New(slog.NewTextHandler(&logs, nil)), client, "A-TEST", test.execute)
+			var results bytes.Buffer
+			err := Run(ctx, client, "A-TEST", test.execute, &results)
 			if test.wantError == "" && err != nil {
 				t.Fatalf("Run() error: %v", err)
 			}
@@ -140,11 +139,17 @@ func TestRun(t *testing.T) {
 			if test.wantError == "" && checks != 1+spinCount {
 				t.Fatalf("checked %d times for %d spins", checks, spinCount)
 			}
-			if strings.Contains(logs.String(), "test-token") || strings.Contains(logs.String(), "test-api-key") {
-				t.Fatal("credentials leaked in logs")
+			if test.prizeJSON == `{"value":"8"}` && !strings.Contains(results.String(), "prize_value=8") {
+				t.Fatalf("prize missing from result output: %s", results.String())
 			}
-			if test.prizeJSON == `{"value":"8"}` && !strings.Contains(logs.String(), "prize_value=8") {
-				t.Fatalf("prize missing from log: %s", logs.String())
+			if test.name == "dry run never spins" && !strings.Contains(results.String(), "Dry run:") {
+				t.Fatalf("dry-run result missing: %s", results.String())
+			}
+			if test.name == "no spins" && !strings.Contains(results.String(), "No available spins") {
+				t.Fatalf("no-action result missing: %s", results.String())
+			}
+			if test.name == "read failure after spin stops run" && !strings.Contains(results.String(), "Wheel spun:") {
+				t.Fatalf("successful spin missing before later failure: %s", results.String())
 			}
 		})
 	}

@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"io"
 	"time"
 
-	"github.com/rogerhutchings/octopus-autojoin/internal/octopus"
+	"github.com/rogerhutchings/octo-cli/internal/octopus"
 )
 
 const savingSessionEventType = "TURN_DOWN"
@@ -46,7 +46,7 @@ type savingSessionsData struct {
 	} `json:"savingSessions"`
 }
 
-func Run(ctx context.Context, logger *slog.Logger, client *octopus.Client, accountNumber string, execute bool) error {
+func Run(ctx context.Context, client *octopus.Client, accountNumber string, execute bool, results io.Writer) error {
 	savingSessions, err := fetchSavingSessions(
 		ctx,
 		client,
@@ -64,15 +64,30 @@ func Run(ctx context.Context, logger *slog.Logger, client *octopus.Client, accou
 		return fmt.Errorf("find candidate saving sessions: %w", err)
 	}
 
-	logCandidateSavingSessions(logger, candidateSessions)
+	if len(candidateSessions) == 0 {
+		if _, err := fmt.Fprintln(results, "No eligible Saving Sessions found."); err != nil {
+			return fmt.Errorf("write Saving Sessions result: %w", err)
+		}
+	} else {
+		for _, event := range candidateSessions {
+			if _, err := fmt.Fprintf(results,
+				"Eligible Saving Session: id=%d code=%s event_type=%s start_at=%s end_at=%s capacity_status=%s\n",
+				event.ID,
+				event.Code,
+				event.EventType,
+				event.StartAt.Format(time.RFC3339),
+				event.EndAt.Format(time.RFC3339),
+				event.CapacityStatus,
+			); err != nil {
+				return fmt.Errorf("write Saving Sessions candidate: %w", err)
+			}
+		}
+	}
 
 	if !execute {
-		if len(candidateSessions) > 0 {
-			logger.Info(
-				"dry run; candidate sessions will not be joined",
-			)
+		if _, err := fmt.Fprintln(results, "Dry run: no sessions were joined."); err != nil {
+			return fmt.Errorf("write Saving Sessions dry-run result: %w", err)
 		}
-
 		return nil
 	}
 
@@ -90,15 +105,10 @@ func Run(ctx context.Context, logger *slog.Logger, client *octopus.Client, accou
 			)
 		}
 
-		logger.Info(
-			"saving session joined",
-			"event_id",
-			event.ID,
-			"event_code",
-			event.Code,
-			"start_at",
-			event.StartAt,
-		)
+		if _, err := fmt.Fprintf(results, "Joined Saving Session: id=%d code=%s start_at=%s\n",
+			event.ID, event.Code, event.StartAt.Format(time.RFC3339)); err != nil {
+			return fmt.Errorf("write joined Saving Sessions result: %w", err)
+		}
 	}
 
 	return nil
@@ -152,35 +162,6 @@ func fetchSavingSessions(
 	}
 
 	return responseData, nil
-}
-
-func logCandidateSavingSessions(
-	logger *slog.Logger,
-	candidateSessions []savingSessionEvent,
-) {
-	logger.Info(
-		"saving sessions checked",
-		"candidate_count",
-		len(candidateSessions),
-	)
-
-	for _, event := range candidateSessions {
-		logger.Info(
-			"saving session candidate",
-			"event_id",
-			event.ID,
-			"event_code",
-			event.Code,
-			"event_type",
-			event.EventType,
-			"start_at",
-			event.StartAt,
-			"end_at",
-			event.EndAt,
-			"capacity_status",
-			event.CapacityStatus,
-		)
-	}
 }
 
 func findCandidateSavingSessions(

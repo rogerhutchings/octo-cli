@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rogerhutchings/octopus-autojoin/internal/octopus"
+	"github.com/rogerhutchings/octo-cli/internal/octopus"
 )
 
 func TestRunHistory(t *testing.T) {

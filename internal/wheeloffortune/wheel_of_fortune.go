@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
+	"io"
 
-	"github.com/rogerhutchings/octopus-autojoin/internal/octopus"
+	"github.com/rogerhutchings/octo-cli/internal/octopus"
 )
 
 type availableSpins struct {
@@ -76,14 +76,25 @@ func spinWheel(ctx context.Context, client *octopus.Client, accountNumber, fuelT
 // Run checks both fuels and, only when execute is true, uses available spins.
 // Mutations are never retried: after an ambiguous result, a later invocation
 // must read the server's allowance afresh.
-func Run(ctx context.Context, logger *slog.Logger, client *octopus.Client, accountNumber string, execute bool) error {
+func Run(ctx context.Context, client *octopus.Client, accountNumber string, execute bool, results io.Writer) error {
 	spins, err := fetchAvailableSpins(ctx, client, accountNumber)
 	if err != nil {
 		return fmt.Errorf("fetch wheel spins: %w", err)
 	}
-	logger.Info("wheel spins checked", "electricity", spins.remaining("ELECTRICITY"), "gas", spins.remaining("GAS"))
+	if _, err := fmt.Fprintf(results, "Available spins: electricity=%d, gas=%d\n",
+		spins.remaining("ELECTRICITY"), spins.remaining("GAS")); err != nil {
+		return fmt.Errorf("write wheel allowance result: %w", err)
+	}
+	if spins.remaining("ELECTRICITY") == 0 && spins.remaining("GAS") == 0 {
+		if _, err := fmt.Fprintln(results, "No available spins; no action taken."); err != nil {
+			return fmt.Errorf("write no-spins result: %w", err)
+		}
+		return nil
+	}
 	if !execute {
-		logger.Info("dry run; available wheel spins will not be used")
+		if _, err := fmt.Fprintln(results, "Dry run: available spins were not used."); err != nil {
+			return fmt.Errorf("write wheel dry-run result: %w", err)
+		}
 		return nil
 	}
 	// Bound this run by the initial allowance, even if the remote count grows.
@@ -95,11 +106,11 @@ func Run(ctx context.Context, logger *slog.Logger, client *octopus.Client, accou
 			if err != nil {
 				return fmt.Errorf("spin %s wheel (not retried; check remaining spins before running again): %w", fuelType, err)
 			}
-			if prize == nil {
-				logger.Info("wheel spun", "fuel", fuelType, "prize_value", "not returned")
-			} else {
-				logger.Info("wheel spun", "fuel", fuelType, "prize_value", prize.String())
+			prizeValue := "not returned"
+			if prize != nil {
+				prizeValue = prize.String()
 			}
+			_, outputErr := fmt.Fprintf(results, "Wheel spun: fuel=%s prize_value=%s\n", fuelType, prizeValue)
 			spins, err = fetchAvailableSpins(ctx, client, accountNumber)
 			if err != nil {
 				return fmt.Errorf("check allowance after %s spin; stopping: %w", fuelType, err)
@@ -107,8 +118,14 @@ func Run(ctx context.Context, logger *slog.Logger, client *octopus.Client, accou
 			if spins.remaining(fuelType) >= before {
 				return fmt.Errorf("%s allowance did not decrease after a spin; stopping to avoid repeated requests", fuelType)
 			}
+			if outputErr != nil {
+				return fmt.Errorf("write wheel spin result: %w", outputErr)
+			}
 		}
 	}
-	logger.Info("wheel spins finished", "electricity_remaining", spins.remaining("ELECTRICITY"), "gas_remaining", spins.remaining("GAS"))
+	if _, err := fmt.Fprintf(results, "Wheel spins finished: electricity_remaining=%d gas_remaining=%d\n",
+		spins.remaining("ELECTRICITY"), spins.remaining("GAS")); err != nil {
+		return fmt.Errorf("write wheel completion result: %w", err)
+	}
 	return nil
 }

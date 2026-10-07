@@ -10,7 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/rogerhutchings/octopus-autojoin/internal/octopus"
+	"github.com/rogerhutchings/octo-cli/internal/octopus"
 )
 
 const historyPageSize = 100

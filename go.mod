@@ -1,4 +1,4 @@
-module github.com/rogerhutchings/octopus-autojoin
+module github.com/rogerhutchings/octo-cli
 
 go 1.27.1
 
