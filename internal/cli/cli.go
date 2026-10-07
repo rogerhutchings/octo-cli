@@ -196,7 +196,7 @@ func execute(selected command, logger *slog.Logger, stdout io.Writer, deps Depen
 	if err := deps.Authenticate(ctx, client, appConfig.APIKey); err != nil {
 		return fmt.Errorf("authenticate with Octopus: %w", err)
 	}
-	logger.Info("authenticated with Octopus")
+	logger.Debug("authenticated with Octopus")
 	switch selected.path {
 	case "saving-sessions join":
 		return deps.RunJoin(ctx, client, appConfig.AccountNumber, selected.execute, stdout)
