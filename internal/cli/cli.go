@@ -22,7 +22,7 @@ type Dependencies struct {
 	NewClient    func(*http.Client) *octopus.Client
 	Authenticate func(context.Context, *octopus.Client, string) error
 	RunJoin      func(context.Context, *octopus.Client, string, bool, io.Writer) error
-	RunSpin      func(context.Context, *octopus.Client, string, bool, io.Writer) error
+	RunSpin      func(context.Context, *octopus.Client, string, bool, int, io.Writer) error
 	RunHistory   func(context.Context, *octopus.Client, string, wheeloffortune.HistoryFilter, io.Writer) error
 }
 
@@ -40,11 +40,13 @@ func DefaultDependencies() Dependencies {
 }
 
 type command struct {
-	path     string
-	execute  bool
-	fromDate string
-	toDate   string
-	fuel     string
+	path        string
+	execute     bool
+	maxSpins    int
+	maxSpinsSet bool
+	fromDate    string
+	toDate      string
+	fuel        string
 }
 
 // Run parses and executes one CLI invocation. It returns a process exit code.
@@ -129,6 +131,9 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 	if leaf == "join" || leaf == "spin" {
 		flags.BoolVar(&selected.execute, "execute", false, "Perform account changes (default: dry run)")
 	}
+	if leaf == "spin" {
+		flags.IntVar(&selected.maxSpins, "max-spins", 0, "Limit total spins (default: all available)")
+	}
 	if leaf == "history" {
 		flags.StringVar(&selected.fromDate, "from", "", "Filter history from YYYY-MM-DD")
 		flags.StringVar(&selected.toDate, "to", "", "Filter history through YYYY-MM-DD")
@@ -146,6 +151,14 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 	}
 	if flags.NArg() != 0 {
 		return command{}, false, false, unexpected(flags.Args())
+	}
+	flags.Visit(func(parsed *flag.Flag) {
+		if parsed.Name == "max-spins" {
+			selected.maxSpinsSet = true
+		}
+	})
+	if selected.maxSpinsSet && selected.maxSpins <= 0 {
+		return command{}, false, false, errors.New("invalid --max-spins; must be a positive integer")
 	}
 	if leaf == "history" {
 		if selected.fuel != "" && selected.fuel != "electricity" && selected.fuel != "gas" {
@@ -188,7 +201,7 @@ func execute(selected command, logger *slog.Logger, stdout io.Writer, deps Depen
 	case "saving-sessions join":
 		return deps.RunJoin(ctx, client, appConfig.AccountNumber, selected.execute, stdout)
 	case "wheel spin":
-		return deps.RunSpin(ctx, client, appConfig.AccountNumber, selected.execute, stdout)
+		return deps.RunSpin(ctx, client, appConfig.AccountNumber, selected.execute, selected.maxSpins, stdout)
 	case "wheel history":
 		return deps.RunHistory(ctx, client, appConfig.AccountNumber, wheeloffortune.HistoryFilter{
 			From: selected.fromDate,
@@ -233,8 +246,9 @@ func printLeafHelp(output io.Writer, path string) {
 		fmt.Fprintln(output, "Usage: octo-cli saving-sessions join [--execute]")
 		fmt.Fprintln(output, "\n--execute  Join eligible sessions (default: dry run)")
 	case "wheel spin":
-		fmt.Fprintln(output, "Usage: octo-cli wheel spin [--execute]")
+		fmt.Fprintln(output, "Usage: octo-cli wheel spin [--execute] [--max-spins N]")
 		fmt.Fprintln(output, "\n--execute  Use available spins (default: dry run)")
+		fmt.Fprintln(output, "--max-spins  Limit total spins across fuels (default: all available)")
 	case "wheel history":
 		fmt.Fprintln(output, "Usage: octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity|gas]")
 		fmt.Fprintln(output, "\n--from  Filter history from this date")

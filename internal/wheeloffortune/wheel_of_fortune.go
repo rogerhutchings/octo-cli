@@ -76,7 +76,7 @@ func spinWheel(ctx context.Context, client *octopus.Client, accountNumber, fuelT
 // Run checks both fuels and, only when execute is true, uses available spins.
 // Mutations are never retried: after an ambiguous result, a later invocation
 // must read the server's allowance afresh.
-func Run(ctx context.Context, client *octopus.Client, accountNumber string, execute bool, results io.Writer) error {
+func Run(ctx context.Context, client *octopus.Client, accountNumber string, execute bool, maxSpins int, results io.Writer) error {
 	spins, err := fetchAvailableSpins(ctx, client, accountNumber)
 	if err != nil {
 		return fmt.Errorf("fetch wheel spins: %w", err)
@@ -92,20 +92,30 @@ func Run(ctx context.Context, client *octopus.Client, accountNumber string, exec
 		return nil
 	}
 	if !execute {
-		if _, err := fmt.Fprintln(results, "Dry run: available spins were not used."); err != nil {
+		message := "Dry run: available spins were not used."
+		if maxSpins > 0 {
+			planned := spins.remaining("ELECTRICITY") + spins.remaining("GAS")
+			if planned > maxSpins {
+				planned = maxSpins
+			}
+			message = fmt.Sprintf("Dry run: would use at most %d of the available spins.", planned)
+		}
+		if _, err := fmt.Fprintln(results, message); err != nil {
 			return fmt.Errorf("write wheel dry-run result: %w", err)
 		}
 		return nil
 	}
 	// Bound this run by the initial allowance, even if the remote count grows.
 	initialSpins := spins
+	attemptedTotal := 0
 	for _, fuelType := range []string{"ELECTRICITY", "GAS"} {
-		for attempted := 0; attempted < initialSpins.remaining(fuelType) && spins.remaining(fuelType) > 0; attempted++ {
+		for attempted := 0; attempted < initialSpins.remaining(fuelType) && spins.remaining(fuelType) > 0 && (maxSpins == 0 || attemptedTotal < maxSpins); attempted++ {
 			before := spins.remaining(fuelType)
 			prize, err := spinWheel(ctx, client, accountNumber, fuelType)
 			if err != nil {
 				return fmt.Errorf("spin %s wheel (not retried; check remaining spins before running again): %w", fuelType, err)
 			}
+			attemptedTotal++
 			prizeValue := "not returned"
 			if prize != nil {
 				prizeValue = prize.String()

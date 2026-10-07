@@ -32,8 +32,8 @@ func testDependencies() (Dependencies, *int, *[]string) {
 			_, err := fmt.Fprintln(results, "join result")
 			return err
 		},
-		RunSpin: func(_ context.Context, _ *octopus.Client, account string, execute bool, results io.Writer) error {
-			calls = append(calls, "spin:"+account+":"+boolString(execute))
+		RunSpin: func(_ context.Context, _ *octopus.Client, account string, execute bool, maxSpins int, results io.Writer) error {
+			calls = append(calls, fmt.Sprintf("spin:%s:%s:%d", account, boolString(execute), maxSpins))
 			_, err := fmt.Fprintln(results, "spin result")
 			return err
 		},
@@ -63,7 +63,7 @@ func TestHelpAndVersionDoNotLoadConfiguration(t *testing.T) {
 		{name: "saving group help", args: []string{"saving-sessions", "--help"}, want: "join"},
 		{name: "wheel group help", args: []string{"wheel"}, want: "history"},
 		{name: "saving leaf help", args: []string{"saving-sessions", "join", "--help"}, want: "[--execute]"},
-		{name: "leaf help", args: []string{"wheel", "spin", "--help"}, want: "[--execute]"},
+		{name: "leaf help", args: []string{"wheel", "spin", "--help"}, want: "--max-spins"},
 		{name: "history help", args: []string{"wheel", "history", "--help"}, want: "[--fuel electricity|gas]"},
 		{name: "version", args: []string{"--version"}, want: "release-test"},
 	} {
@@ -96,6 +96,9 @@ func TestInvalidCommandsFailBeforeConfiguration(t *testing.T) {
 		{"wheel", "history", "--from", "2026-02-01", "--to", "2026-01-31"},
 		{"wheel", "history", "--fuel", "electric"},
 		{"wheel", "spin", "--unknown"},
+		{"wheel", "spin", "--max-spins", "0"},
+		{"wheel", "spin", "--max-spins", "-1"},
+		{"wheel", "spin", "--max-spins", "many"},
 		{"wheel", "spin", "--execute", "join"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -121,8 +124,9 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 	}{
 		{args: []string{"saving-sessions", "join"}, want: "join:A-TEST:false"},
 		{args: []string{"saving-sessions", "join", "--execute"}, want: "join:A-TEST:true"},
-		{args: []string{"wheel", "spin"}, want: "spin:A-TEST:false"},
-		{args: []string{"wheel", "spin", "--execute"}, want: "spin:A-TEST:true"},
+		{args: []string{"wheel", "spin"}, want: "spin:A-TEST:false:0"},
+		{args: []string{"wheel", "spin", "--execute"}, want: "spin:A-TEST:true:0"},
+		{args: []string{"wheel", "spin", "--max-spins", "1"}, want: "spin:A-TEST:false:1"},
 		{args: []string{"wheel", "history", "--from", "2026-01-01", "--to", "2026-01-31", "--fuel", "gas"}, want: "history:A-TEST:2026-01-01:2026-01-31:GAS"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
@@ -164,7 +168,7 @@ func TestBareGroupsPrintHelpWithoutConfiguration(t *testing.T) {
 
 func TestResultsStayOnStdoutWhenCommandFails(t *testing.T) {
 	deps, _, _ := testDependencies()
-	deps.RunSpin = func(_ context.Context, _ *octopus.Client, _ string, _ bool, results io.Writer) error {
+	deps.RunSpin = func(_ context.Context, _ *octopus.Client, _ string, _ bool, _ int, results io.Writer) error {
 		if _, err := fmt.Fprintln(results, "Wheel spun: fuel=ELECTRICITY prize_value=8"); err != nil {
 			return err
 		}

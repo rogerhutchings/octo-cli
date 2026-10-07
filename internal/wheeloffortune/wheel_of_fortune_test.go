@@ -23,6 +23,7 @@ func TestRun(t *testing.T) {
 	for _, test := range []struct {
 		name              string
 		execute           bool
+		maxSpins          int
 		electricity, gas  int
 		prizeJSON         string
 		spinResponse      string
@@ -35,6 +36,9 @@ func TestRun(t *testing.T) {
 		{name: "dry run never spins", electricity: 2, gas: 2},
 		{name: "no spins", execute: true},
 		{name: "both fuels", execute: true, electricity: 2, gas: 2, prizeJSON: `{"value":8}`, wantSpins: 4},
+		{name: "limit spans both fuels", execute: true, maxSpins: 1, electricity: 2, gas: 2, prizeJSON: `{"value":8}`, wantSpins: 1},
+		{name: "limit above allowance", execute: true, maxSpins: 10, electricity: 1, gas: 1, prizeJSON: `{"value":8}`, wantSpins: 2},
+		{name: "limited dry run plans capped total", maxSpins: 1, electricity: 2, gas: 2, wantSpins: 0},
 		{name: "only electricity", execute: true, electricity: 2, prizeJSON: `{"value":"8"}`, wantSpins: 2},
 		{name: "only gas", execute: true, gas: 2, prizeJSON: `{"value":0}`, wantSpins: 2},
 		{name: "null prize is a successful spin", execute: true, electricity: 1, prizeJSON: `null`, wantSpins: 1},
@@ -123,7 +127,7 @@ func TestRun(t *testing.T) {
 				t.Fatal(err)
 			}
 			var results bytes.Buffer
-			err := Run(ctx, client, "A-TEST", test.execute, &results)
+			err := Run(ctx, client, "A-TEST", test.execute, test.maxSpins, &results)
 			if test.wantError == "" && err != nil {
 				t.Fatalf("Run() error: %v", err)
 			}
@@ -144,6 +148,9 @@ func TestRun(t *testing.T) {
 			}
 			if test.name == "dry run never spins" && !strings.Contains(results.String(), "Dry run:") {
 				t.Fatalf("dry-run result missing: %s", results.String())
+			}
+			if test.name == "limited dry run plans capped total" && !strings.Contains(results.String(), "would use at most 1 of the available spins") {
+				t.Fatalf("limited dry-run plan missing: %s", results.String())
 			}
 			if test.name == "no spins" && !strings.Contains(results.String(), "No available spins") {
 				t.Fatalf("no-action result missing: %s", results.String())
