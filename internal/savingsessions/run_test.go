@@ -81,8 +81,8 @@ func TestRunWithSharedClient(t *testing.T) {
 			if test.execute && test.confirmed && !strings.Contains(results.String(), "Joined Saving Session:") {
 				t.Fatalf("joined result missing from output: %q", results.String())
 			}
-			if !test.execute && !strings.Contains(results.String(), "Dry run:") {
-				t.Fatalf("dry-run result missing from output: %q", results.String())
+			if !test.execute && (!strings.Contains(results.String(), "Dry run:") || !strings.Contains(results.String(), "--execute to join eligible sessions")) {
+				t.Fatalf("actionable dry-run result missing from output: %q", results.String())
 			}
 		})
 	}
@@ -153,5 +153,7 @@ func TestNoEligibleSessionsWritesNoActionResult(t *testing.T) {
 	}
 	if got := results.String(); !strings.Contains(got, "No eligible Saving Sessions found.") {
 		t.Fatalf("no-action result missing from output: %q", got)
+	} else if strings.Contains(got, "--execute") {
+		t.Fatalf("empty result suggests an action: %q", got)
 	}
 }

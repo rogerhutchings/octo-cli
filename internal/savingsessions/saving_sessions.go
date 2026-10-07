@@ -84,10 +84,13 @@ func Run(ctx context.Context, client *octopus.Client, accountNumber string, exec
 		}
 	}
 
-	if !execute {
-		if _, err := fmt.Fprintln(results, "Dry run: no sessions were joined."); err != nil {
+	if !execute && len(candidateSessions) > 0 {
+		if _, err := fmt.Fprintln(results, "Dry run: no sessions were joined. Run with --execute to join eligible sessions."); err != nil {
 			return fmt.Errorf("write Saving Sessions dry-run result: %w", err)
 		}
+		return nil
+	}
+	if !execute {
 		return nil
 	}
 

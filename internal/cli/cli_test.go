@@ -145,8 +145,8 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 				if !strings.Contains(stdout.String(), "result") {
 					t.Fatalf("stdout = %q, want command result", stdout.String())
 				}
-				if strings.Contains(stderr.String(), "result") || !strings.Contains(stderr.String(), "authenticated with Octopus") {
-					t.Fatalf("stderr = %q, want only diagnostics", stderr.String())
+				if stderr.Len() != 0 {
+					t.Fatalf("stderr = %q, want no routine authentication message", stderr.String())
 				}
 			}
 		})

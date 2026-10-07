@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/rogerhutchings/octo-cli/internal/octopus"
 )
@@ -24,6 +25,14 @@ func (spins availableSpins) remaining(fuelType string) int {
 		return *spins.Electricity.SpinsAllowed
 	}
 	return *spins.Gas.SpinsAllowed
+}
+
+func formatSpinCount(fuelType string, count int) string {
+	unit := "spins"
+	if count == 1 {
+		unit = "spin"
+	}
+	return fmt.Sprintf("%d %s %s", count, strings.ToLower(fuelType), unit)
 }
 
 func fetchAvailableSpins(ctx context.Context, client *octopus.Client, accountNumber string) (availableSpins, error) {
@@ -81,8 +90,9 @@ func Run(ctx context.Context, client *octopus.Client, accountNumber string, exec
 	if err != nil {
 		return fmt.Errorf("fetch wheel spins: %w", err)
 	}
-	if _, err := fmt.Fprintf(results, "Available spins: electricity=%d, gas=%d\n",
-		spins.remaining("ELECTRICITY"), spins.remaining("GAS")); err != nil {
+	if _, err := fmt.Fprintf(results, "Available spins: %s, %s.\n",
+		formatSpinCount("ELECTRICITY", spins.remaining("ELECTRICITY")),
+		formatSpinCount("GAS", spins.remaining("GAS"))); err != nil {
 		return fmt.Errorf("write wheel allowance result: %w", err)
 	}
 	if spins.remaining("ELECTRICITY") == 0 && spins.remaining("GAS") == 0 {
@@ -98,7 +108,13 @@ func Run(ctx context.Context, client *octopus.Client, accountNumber string, exec
 			if planned > maxSpins {
 				planned = maxSpins
 			}
-			message = fmt.Sprintf("Dry run: would use at most %d of the available spins.", planned)
+			unit := "spins"
+			if planned == 1 {
+				unit = "spin"
+			}
+			message = fmt.Sprintf("Dry run: would use at most %d %s. Run with --execute to use them.", planned, unit)
+		} else {
+			message += " Run with --execute to use them."
 		}
 		if _, err := fmt.Fprintln(results, message); err != nil {
 			return fmt.Errorf("write wheel dry-run result: %w", err)
@@ -113,28 +129,29 @@ func Run(ctx context.Context, client *octopus.Client, accountNumber string, exec
 			before := spins.remaining(fuelType)
 			prize, err := spinWheel(ctx, client, accountNumber, fuelType)
 			if err != nil {
-				return fmt.Errorf("spin %s wheel (not retried; check remaining spins before running again): %w", fuelType, err)
+				return fmt.Errorf("spin %s wheel (not retried; check remaining spins before running again): %w", strings.ToLower(fuelType), err)
 			}
 			attemptedTotal++
 			prizeValue := "not returned"
 			if prize != nil {
 				prizeValue = prize.String()
 			}
-			_, outputErr := fmt.Fprintf(results, "Wheel spun: fuel=%s prize_value=%s\n", fuelType, prizeValue)
+			_, outputErr := fmt.Fprintf(results, "Wheel spun: %s; prize value=%s\n", formatSpinCount(fuelType, 1), prizeValue)
 			spins, err = fetchAvailableSpins(ctx, client, accountNumber)
 			if err != nil {
-				return fmt.Errorf("check allowance after %s spin; stopping: %w", fuelType, err)
+				return fmt.Errorf("check allowance after %s spin; stopping: %w", strings.ToLower(fuelType), err)
 			}
 			if spins.remaining(fuelType) >= before {
-				return fmt.Errorf("%s allowance did not decrease after a spin; stopping to avoid repeated requests", fuelType)
+				return fmt.Errorf("%s allowance did not decrease after a spin; stopping to avoid repeated requests", strings.ToLower(fuelType))
 			}
 			if outputErr != nil {
 				return fmt.Errorf("write wheel spin result: %w", outputErr)
 			}
 		}
 	}
-	if _, err := fmt.Fprintf(results, "Wheel spins finished: electricity_remaining=%d gas_remaining=%d\n",
-		spins.remaining("ELECTRICITY"), spins.remaining("GAS")); err != nil {
+	if _, err := fmt.Fprintf(results, "Spins remaining: %s, %s.\n",
+		formatSpinCount("ELECTRICITY", spins.remaining("ELECTRICITY")),
+		formatSpinCount("GAS", spins.remaining("GAS"))); err != nil {
 		return fmt.Errorf("write wheel completion result: %w", err)
 	}
 	return nil

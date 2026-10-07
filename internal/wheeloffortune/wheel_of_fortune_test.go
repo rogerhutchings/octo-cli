@@ -143,17 +143,23 @@ func TestRun(t *testing.T) {
 			if test.wantError == "" && checks != 1+spinCount {
 				t.Fatalf("checked %d times for %d spins", checks, spinCount)
 			}
-			if test.prizeJSON == `{"value":"8"}` && !strings.Contains(results.String(), "prize_value=8") {
+			if test.prizeJSON == `{"value":"8"}` && !strings.Contains(results.String(), "prize value=8") {
 				t.Fatalf("prize missing from result output: %s", results.String())
 			}
-			if test.name == "dry run never spins" && !strings.Contains(results.String(), "Dry run:") {
-				t.Fatalf("dry-run result missing: %s", results.String())
+			if test.name == "dry run never spins" && (!strings.Contains(results.String(), "2 electricity spins, 2 gas spins") || !strings.Contains(results.String(), "--execute to use them")) {
+				t.Fatalf("readable actionable dry-run result missing: %s", results.String())
 			}
-			if test.name == "limited dry run plans capped total" && !strings.Contains(results.String(), "would use at most 1 of the available spins") {
-				t.Fatalf("limited dry-run plan missing: %s", results.String())
+			if test.name == "no spins" && (strings.Contains(results.String(), "--execute") || !strings.Contains(results.String(), "No available spins")) {
+				t.Fatalf("no-action result should not suggest execution: %s", results.String())
 			}
-			if test.name == "no spins" && !strings.Contains(results.String(), "No available spins") {
-				t.Fatalf("no-action result missing: %s", results.String())
+			if test.name == "both fuels" && (!strings.Contains(results.String(), "Wheel spun: 1 electricity spin; prize value=8") || !strings.Contains(results.String(), "Spins remaining: 0 electricity spins, 0 gas spins")) {
+				t.Fatalf("spin output is not readable or consistent: %s", results.String())
+			}
+			if test.name == "only gas" && (!strings.Contains(results.String(), "Wheel spun: 1 gas spin; prize value=0") || !strings.Contains(results.String(), "0 electricity spins, 0 gas spins")) {
+				t.Fatalf("singular gas output is incorrect: %s", results.String())
+			}
+			if test.name == "limited dry run plans capped total" && (!strings.Contains(results.String(), "would use at most 1 spin") || !strings.Contains(results.String(), "--execute to use them")) {
+				t.Fatalf("limited dry-run plan missing or not actionable: %s", results.String())
 			}
 			if test.name == "read failure after spin stops run" && !strings.Contains(results.String(), "Wheel spun:") {
 				t.Fatalf("successful spin missing before later failure: %s", results.String())
