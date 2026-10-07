@@ -47,6 +47,46 @@ func TestAuthenticationRejectsInvalidResponses(t *testing.T) {
 	}
 }
 
+func TestAuthenticateRejectsBlankAPIKeyBeforeRequest(t *testing.T) {
+	for _, apiKey := range []string{"", " \t\n "} {
+		client := NewClient(&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			t.Fatal("blank API key caused an authentication request")
+			return nil, nil
+		})})
+		err := client.Authenticate(context.Background(), apiKey)
+		if err == nil || !strings.Contains(err.Error(), "validate API key: OCTOPUS_API_KEY is required") {
+			t.Fatalf("Authenticate() error = %v, want API key validation error", err)
+		}
+	}
+}
+
+func TestAuthenticationErrorIsActionableAndRedactsFullAPIKey(t *testing.T) {
+	const apiKey = "octo-APIKEY-secret-987654"
+	client := NewClient(&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body := `{"errors":[{"message":"Invalid data. Echo: octo-APIKEY-secret-987654"}],"extensions":{"debug":"request-body-marker token-body-marker"}}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})})
+	err := client.Authenticate(context.Background(), apiKey)
+	if err == nil {
+		t.Fatal("Authenticate() succeeded, want upstream error")
+	}
+	message := err.Error()
+	for _, expected := range []string{
+		"request Kraken token",
+		"GraphQL returned errors: Invalid data.",
+		"check that OCTOPUS_API_KEY contains the API key rather than the account number",
+	} {
+		if !strings.Contains(message, expected) {
+			t.Errorf("error %q does not contain %q", message, expected)
+		}
+	}
+	for _, secret := range []string{apiKey, "request-body-marker", "token-body-marker"} {
+		if strings.Contains(message, secret) {
+			t.Errorf("authentication error leaked %q: %s", secret, message)
+		}
+	}
+}
+
 func TestBackendRequiresAuthentication(t *testing.T) {
 	client := NewClient(&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		t.Fatal("unauthenticated client made a request")

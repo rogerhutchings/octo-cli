@@ -1,8 +1,8 @@
 # octopus-autojoin
 
-A small Go CLI for automating Octopus Energy account tasks: joining eligible Power Down Saving Sessions and using available Wheel of Fortune spins.
+A small Go CLI for Octopus Energy account tasks: joining eligible Power Down Saving Sessions, using available Wheel of Fortune spins, and viewing Wheel of Fortune history.
 
-Both commands default to a dry run, share API-key authentication, and can run unattended using systemd timers.
+The account-changing commands default to a dry run. All commands share API-key authentication and can run unattended using systemd timers.
 
 ## Prerequisites
 
@@ -34,9 +34,17 @@ octopus-autojoin wheel-of-fortune
 
 # Use available spins for both fuels and log each result.
 octopus-autojoin wheel-of-fortune --execute
+
+# Show all available Wheel of Fortune history.
+octopus-autojoin wheel-of-fortune-history
+
+# Filter history by date and fuel.
+octopus-autojoin wheel-of-fortune-history --from 2026-01-01 --to 2026-01-31 --fuel electricity
 ```
 
 Put the command before its flags. `--help` and `--version` work without credentials. The binary name, module path, environment variables and default Saving Sessions behaviour are unchanged. Renaming the project can be handled separately.
+
+`wheel-of-fortune-history` is read-only and never needs `--execute`. Its optional `--from` and `--to` flags use `YYYY-MM-DD`; `--fuel` accepts `electricity` or `gas` and is omitted when not set. It retrieves every matching page, then sorts the results newest first. The table shows timestamp, prize and prize type. It prefers the API's prize display text and uses the raw value only when display text is unavailable, without assigning a currency or points unit. Missing fields and empty history are shown clearly. If any page fails or is incomplete, the command exits with an error and does not print a partial table.
 
 ### Wheel of Fortune behaviour
 

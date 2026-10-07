@@ -30,6 +30,20 @@ func TestLoadConfigEnvironmentOverridesDotEnv(t *testing.T) {
 	}
 }
 
+func TestLoadConfigSupportsEnvironmentWithoutDotEnv(t *testing.T) {
+	chdirTemporaryDirectory(t)
+	t.Setenv("OCTOPUS_API_KEY", "environment-key")
+	t.Setenv("OCTOPUS_ACCOUNT_NUMBER", "environment-account")
+
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if got.APIKey != "environment-key" || got.AccountNumber != "environment-account" {
+		t.Fatalf("Load() = %+v, want values from environment", got)
+	}
+}
+
 func TestLoadConfigUsesDotEnvWhenEnvironmentIsUnset(t *testing.T) {
 	temporaryDirectory := chdirTemporaryDirectory(t)
 	if err := os.WriteFile(filepath.Join(temporaryDirectory, ".env"), []byte(
@@ -80,6 +94,27 @@ func TestLoadConfigRequiresBothValues(t *testing.T) {
 					err,
 					test.missing,
 				)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsWhitespaceOnlyCredentials(t *testing.T) {
+	for _, name := range []string{"OCTOPUS_API_KEY", "OCTOPUS_ACCOUNT_NUMBER"} {
+		t.Run(name, func(t *testing.T) {
+			chdirTemporaryDirectory(t)
+			unsetEnvironment(t, "OCTOPUS_API_KEY")
+			unsetEnvironment(t, "OCTOPUS_ACCOUNT_NUMBER")
+			t.Setenv(name, " \t\n ")
+			other := "OCTOPUS_API_KEY"
+			if name == other {
+				other = "OCTOPUS_ACCOUNT_NUMBER"
+			}
+			t.Setenv(other, "present")
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("Load() error = %v, want error mentioning %s", err, name)
 			}
 		})
 	}

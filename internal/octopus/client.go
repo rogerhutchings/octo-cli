@@ -49,6 +49,9 @@ func (client *Client) Backend(ctx context.Context, query string, variables map[s
 }
 
 func (client *Client) Authenticate(ctx context.Context, apiKey string) error {
+	if strings.TrimSpace(apiKey) == "" {
+		return errors.New("validate API key: OCTOPUS_API_KEY is required")
+	}
 	const query = `
 		mutation ObtainToken($input: ObtainJSONWebTokenInput!) {
 			obtainKrakenToken(input: $input) {
@@ -76,17 +79,20 @@ func (client *Client) Authenticate(ctx context.Context, apiKey string) error {
 		&responseData,
 	)
 	if err != nil {
-		return errors.New(strings.ReplaceAll(err.Error(), apiKey, "[redacted]"))
+		safeError := errors.New(strings.ReplaceAll(err.Error(), apiKey, "[redacted]"))
+		if strings.Contains(strings.ToLower(safeError.Error()), "invalid data") {
+			return fmt.Errorf("request Kraken token: %w; check that OCTOPUS_API_KEY contains the API key rather than the account number", safeError)
+		}
+		return fmt.Errorf("request Kraken token: %w", safeError)
 	}
 
 	if responseData.ObtainKrakenToken.Token == "" {
-		return errors.New("Octopus returned an empty Kraken token")
+		return errors.New("validate Kraken token response: Octopus returned an empty Kraken token")
 	}
 
 	client.token = responseData.ObtainKrakenToken.Token
 	return nil
 }
-
 func (client *Client) postGraphQL(
 	ctx context.Context,
 	endpoint string,
