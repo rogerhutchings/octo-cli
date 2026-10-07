@@ -24,12 +24,16 @@ func TestRunWithSharedClient(t *testing.T) {
 	for _, test := range []struct {
 		name               string
 		execute, confirmed bool
+		unknownJoined      bool
+		nullAccount        bool
 		wantJoins          int
 		wantError          bool
 	}{
 		{name: "dry run"},
 		{name: "execute", execute: true, confirmed: true, wantJoins: 1},
 		{name: "missing confirmation", execute: true, wantJoins: 1, wantError: true},
+		{name: "unknown joined status", execute: true, unknownJoined: true, wantError: true},
+		{name: "null account prevents join", execute: true, nullAccount: true, wantError: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			joins := 0
@@ -58,7 +62,15 @@ func TestRunWithSharedClient(t *testing.T) {
 							body = `{"data":{"joinSavingSessionsEvent":{"joinedEventCodes":["EVENT_TEST"]}}}`
 						}
 					} else {
-						body = fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":1,"code":"EVENT_TEST","startAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":{"regionId":10},"hasJoinedCampaign":true,"joinedEvents":[]}}}}`, time.Now().Add(time.Hour).Format(time.RFC3339))
+						if test.nullAccount {
+							body = fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":1,"code":"EVENT_TEST","startAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":null}}}`, time.Now().Add(time.Hour).Format(time.RFC3339))
+						} else {
+							joinedEvents := `[]`
+							if test.unknownJoined {
+								joinedEvents = `null`
+							}
+							body = fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":1,"code":"EVENT_TEST","startAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":{"regionId":10},"joinedEvents":%s}}}}`, time.Now().Add(time.Hour).Format(time.RFC3339), joinedEvents)
+						}
 					}
 				}
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
@@ -75,8 +87,16 @@ func TestRunWithSharedClient(t *testing.T) {
 			if joins != test.wantJoins {
 				t.Fatalf("joins = %d, want %d", joins, test.wantJoins)
 			}
-			if !strings.Contains(results.String(), "Eligible Saving Session:") {
+			if !test.unknownJoined && !test.nullAccount && !strings.Contains(results.String(), "Eligible Saving Session:") {
 				t.Fatalf("candidate result missing from output: %q", results.String())
+			}
+			if test.unknownJoined && (joins != 0 || strings.Contains(results.String(), "Eligible Saving Session:")) {
+				t.Fatalf("unknown joined status was treated as eligible: joins=%d output=%q", joins, results.String())
+			}
+			if test.nullAccount {
+				if joins != 0 || strings.Contains(results.String(), "Eligible Saving Session:") || err == nil || !strings.Contains(err.Error(), "account data is unavailable") {
+					t.Fatalf("null account did not fail safely: joins=%d error=%v output=%q", joins, err, results.String())
+				}
 			}
 			if test.execute && test.confirmed && !strings.Contains(results.String(), "Joined Saving Session:") {
 				t.Fatalf("joined result missing from output: %q", results.String())

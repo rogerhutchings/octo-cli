@@ -37,9 +37,19 @@ func testDependencies() (Dependencies, *int, *[]string) {
 			_, err := fmt.Fprintln(results, "spin result")
 			return err
 		},
+		RunStatus: func(_ context.Context, _ *octopus.Client, account string, results io.Writer) error {
+			calls = append(calls, "status:"+account)
+			_, err := fmt.Fprintln(results, "status result")
+			return err
+		},
 		RunHistory: func(_ context.Context, _ *octopus.Client, account string, filter wheeloffortune.HistoryFilter, _ io.Writer) error {
 			calls = append(calls, "history:"+account+":"+filter.From+":"+filter.To+":"+filter.Fuel)
 			return nil
+		},
+		RunList: func(_ context.Context, _ *octopus.Client, account string, results io.Writer) error {
+			calls = append(calls, "list:"+account)
+			_, err := fmt.Fprintln(results, "list result")
+			return err
 		},
 	}
 	return deps, &loads, &calls
@@ -61,7 +71,9 @@ func TestHelpAndVersionDoNotLoadConfiguration(t *testing.T) {
 		{name: "root help", args: []string{"--help"}, want: "saving-sessions"},
 		{name: "bare root", want: "wheel"},
 		{name: "saving group help", args: []string{"saving-sessions", "--help"}, want: "join"},
+		{name: "saving list help", args: []string{"saving-sessions", "list", "--help"}, want: "saving-sessions list"},
 		{name: "wheel group help", args: []string{"wheel"}, want: "history"},
+		{name: "wheel status help", args: []string{"wheel", "status", "--help"}, want: "wheel status"},
 		{name: "saving leaf help", args: []string{"saving-sessions", "join", "--help"}, want: "[--execute]"},
 		{name: "leaf help", args: []string{"wheel", "spin", "--help"}, want: "--max-spins"},
 		{name: "history help", args: []string{"wheel", "history", "--help"}, want: "[--fuel electricity|gas]"},
@@ -88,6 +100,10 @@ func TestInvalidCommandsFailBeforeConfiguration(t *testing.T) {
 		{"saving-sessions", "--execute"},
 		{"wheel-of-fortune"},
 		{"saving-sessions", "join", "--fuel", "gas"},
+		{"saving-sessions", "list", "--execute"},
+		{"saving-sessions", "list", "--from", "2026-01-01"},
+		{"wheel", "status", "--execute"},
+		{"wheel", "status", "--fuel", "gas"},
 		{"wheel", "spin", "--from", "2026-01-01"},
 		{"wheel", "history", "--execute"},
 		{"wheel", "history", "unexpected"},
@@ -128,6 +144,8 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 		{args: []string{"wheel", "spin", "--execute"}, want: "spin:A-TEST:true:0"},
 		{args: []string{"wheel", "spin", "--max-spins", "1"}, want: "spin:A-TEST:false:1"},
 		{args: []string{"wheel", "history", "--from", "2026-01-01", "--to", "2026-01-31", "--fuel", "gas"}, want: "history:A-TEST:2026-01-01:2026-01-31:GAS"},
+		{args: []string{"saving-sessions", "list"}, want: "list:A-TEST"},
+		{args: []string{"wheel", "status"}, want: "status:A-TEST"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			deps, loads, calls := testDependencies()
@@ -141,7 +159,7 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 			if len(*calls) < 2 || (*calls)[len(*calls)-1] != test.want {
 				t.Fatalf("calls = %v, want final call %q", *calls, test.want)
 			}
-			if strings.Contains(test.want, "join:") || strings.Contains(test.want, "spin:") {
+			if strings.Contains(test.want, "join:") || strings.Contains(test.want, "spin:") || strings.Contains(test.want, "list:") || strings.Contains(test.want, "status:") {
 				if !strings.Contains(stdout.String(), "result") {
 					t.Fatalf("stdout = %q, want command result", stdout.String())
 				}

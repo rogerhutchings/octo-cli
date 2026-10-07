@@ -1,6 +1,6 @@
 # octo-cli
 
-`octo-cli` is a small Go command line tool for Octopus Energy account tasks. It can join eligible Power Down Saving Sessions, use available Wheel of Fortune spins, and show Wheel of Fortune history.
+`octo-cli` is a small Go command line tool for Octopus Energy account tasks. It can list upcoming Power Down Saving Sessions, join eligible sessions, show and use available Wheel of Fortune spins, and show Wheel of Fortune history.
 
 Account changing commands default to a dry run. Help and version output do not require credentials or network access. Commands that contact Octopus require an API key and account number and can run unattended with systemd timers.
 
@@ -28,28 +28,34 @@ octo-cli --version
 octo-cli saving-sessions join
 octo-cli saving-sessions join --execute
 
+# List upcoming Saving Sessions and show why each can or cannot be joined.
+octo-cli saving-sessions list
+
 # Check available Wheel of Fortune spins, or use them with --execute.
 octo-cli wheel spin
 octo-cli wheel spin --execute
+
+# Show available electricity and gas spins without taking action.
+octo-cli wheel status
 
 # Show Wheel of Fortune history, with optional date and fuel filters.
 octo-cli wheel history
 octo-cli wheel history --from 2026-01-01 --to 2026-01-31 --fuel electricity
 ```
 
-Use `octo-cli saving-sessions --help` or `octo-cli wheel --help` for group help. `--execute` is available only for `join` and `spin`. History flags are available only for `wheel history`; dates use `YYYY-MM-DD`, and fuel is `electricity` or `gas`.
+Use `octo-cli saving-sessions --help` or `octo-cli wheel --help` for group help. `--execute` is available only for `join` and `spin`. History flags are available only for `wheel history`; dates use `YYYY-MM-DD`, and fuel is `electricity` or `gas`. The `list` and `status` commands are read-only and reject `--execute`.
 
 History retrieves every matching page, sorts the results newest first, and prints timestamp, prize and prize type. It prefers the API's prize display text and uses the raw value only when display text is unavailable, without assigning a currency or points unit. Missing fields and empty history are shown clearly. If any page fails or is incomplete, the command exits with an error and does not print a partial table.
 
 ### Saving Sessions behaviour
 
-The join command preserves the existing eligibility checks, including event type, capacity, region, campaign and joined-session status. Eligible candidates, successful joins, dry-run outcomes and the no-eligible-sessions result print to stdout. No eligible sessions is a successful result. When eligible sessions are available, a dry run explains that `--execute` joins them.
+The `list` command shows upcoming sessions in start-time order, including joined and ineligible sessions. Its eligibility label follows the CLI's current candidate filters: the session must start in the future, use the `TURN_DOWN` event type, apply to the account region, and not appear in the account's joined-event list. Missing region data is reported as unavailable; missing joined-event data is shown as unknown. Neither case is treated as eligible. Capacity and campaign participation do not affect the CLI's candidate selection. Empty results are successful. The join command uses the same assessment; eligible candidates, successful joins, dry-run outcomes and the no-eligible-sessions result print to stdout. When eligible sessions are available, a dry run explains that `--execute` joins them.
 
 ### Wheel of Fortune behaviour
 
-The spin command queries the backend for the available allowance for each fuel. Counts use readable fuel names and singular or plural `spin` wording. No available spins is a successful result. When spins are available, a dry run explains that `--execute` uses them. Each spin is followed by a fresh allowance check. The command stops if the count does not decrease, a response is incomplete, or an API request fails. It never attempts more spins per fuel than were available at the start of the run. Spin mutations are not automatically retried because a timeout could mean the server used a spin but the response was lost. A later invocation checks the remaining allowance afresh.
+The `status` and `spin` commands query the backend for the available allowance for each fuel. Status only reports electricity and gas counts; it never spins or prints a dry-run message. Counts use readable fuel names and singular or plural `spin` wording. No available spins is a successful result. When spins are available, a spin dry run explains that `--execute` uses them. Each spin is followed by a fresh allowance check. The command stops if the count does not decrease, a response is incomplete, or an API request fails. It never attempts more spins per fuel than were available at the start of the run. Spin mutations are not automatically retried because a timeout could mean the server used a spin but the response was lost. A later invocation checks the remaining allowance afresh.
 
-Available spins, dry-run outcomes, successful spin results and no-action results print to stdout. If a later allowance request fails, earlier successful spin results remain in stdout. A successful spin can have no prize value; this is reported as `not returned` rather than treated as a failed spin. Errors print to stderr; successful authentication has no routine stderr message. The raw prize value is printed without an assumed points or currency unit. The command does not redeem Octopoints into account credit.
+Status output, available spins, dry-run outcomes, successful spin results and no-action results print to stdout. If a later allowance request fails, earlier successful spin results remain in stdout. A successful spin can have no prize value; this is reported as `not returned` rather than treated as a failed spin. Errors print to stderr; successful authentication has no routine stderr message. The raw prize value is printed without an assumed points or currency unit. The command does not redeem Octopoints into account credit.
 
 Requests use `wheelOfFortuneSpinsAllowed` and `spinWheelOfFortune` at `https://api.backend.octopus.energy/v1/graphql/`, following the operations used by [Home Assistant Octopus Energy](https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy/blob/develop/custom_components/octopus_energy/api_client/__init__.py). These operations are covered by mocked API tests; run a dry run against your account before enabling execution.
 

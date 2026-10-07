@@ -23,7 +23,9 @@ type Dependencies struct {
 	Authenticate func(context.Context, *octopus.Client, string) error
 	RunJoin      func(context.Context, *octopus.Client, string, bool, io.Writer) error
 	RunSpin      func(context.Context, *octopus.Client, string, bool, int, io.Writer) error
+	RunStatus    func(context.Context, *octopus.Client, string, io.Writer) error
 	RunHistory   func(context.Context, *octopus.Client, string, wheeloffortune.HistoryFilter, io.Writer) error
+	RunList      func(context.Context, *octopus.Client, string, io.Writer) error
 }
 
 func DefaultDependencies() Dependencies {
@@ -35,7 +37,9 @@ func DefaultDependencies() Dependencies {
 		},
 		RunJoin:    savingsessions.Run,
 		RunSpin:    wheeloffortune.Run,
+		RunStatus:  wheeloffortune.RunStatus,
 		RunHistory: wheeloffortune.RunHistory,
+		RunList:    savingsessions.RunList,
 	}
 }
 
@@ -118,7 +122,7 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 		}
 		return command{}, true, false, nil
 	}
-	if (group == "saving-sessions" && leaf != "join") || (group == "wheel" && leaf != "spin" && leaf != "history") {
+	if (group == "saving-sessions" && leaf != "join" && leaf != "list") || (group == "wheel" && leaf != "spin" && leaf != "history" && leaf != "status") {
 		return command{}, false, false, fmt.Errorf("unknown command %q under %q", leaf, group)
 	}
 
@@ -208,6 +212,10 @@ func execute(selected command, logger *slog.Logger, stdout io.Writer, deps Depen
 			To:   selected.toDate,
 			Fuel: strings.ToUpper(selected.fuel),
 		}, stdout)
+	case "wheel status":
+		return deps.RunStatus(ctx, client, appConfig.AccountNumber, stdout)
+	case "saving-sessions list":
+		return deps.RunList(ctx, client, appConfig.AccountNumber, stdout)
 	default:
 		return fmt.Errorf("unsupported command %q", selected.path)
 	}
@@ -230,13 +238,14 @@ func printRootHelp(output io.Writer) {
 
 func printSavingHelp(output io.Writer) {
 	fmt.Fprintln(output, "Usage: octo-cli saving-sessions <command> [flags]")
-	fmt.Fprintln(output, "\nCommands:\n  join  Join eligible Saving Sessions")
+	fmt.Fprintln(output, "\nCommands:\n  join  Join eligible Saving Sessions\n  list  Show upcoming Saving Sessions")
 }
 
 func printWheelHelp(output io.Writer) {
 	fmt.Fprintln(output, "Usage: octo-cli wheel <command> [flags]")
 	fmt.Fprintln(output, "\nCommands:")
 	fmt.Fprintln(output, "  spin     Check or use available spins")
+	fmt.Fprintln(output, "  status   Show available spins")
 	fmt.Fprintln(output, "  history  Show Wheel of Fortune history")
 }
 
@@ -245,6 +254,8 @@ func printLeafHelp(output io.Writer, path string) {
 	case "saving-sessions join":
 		fmt.Fprintln(output, "Usage: octo-cli saving-sessions join [--execute]")
 		fmt.Fprintln(output, "\n--execute  Join eligible sessions (default: dry run)")
+	case "saving-sessions list":
+		fmt.Fprintln(output, "Usage: octo-cli saving-sessions list")
 	case "wheel spin":
 		fmt.Fprintln(output, "Usage: octo-cli wheel spin [--execute] [--max-spins N]")
 		fmt.Fprintln(output, "\n--execute  Use available spins (default: dry run)")
@@ -254,5 +265,7 @@ func printLeafHelp(output io.Writer, path string) {
 		fmt.Fprintln(output, "\n--from  Filter history from this date")
 		fmt.Fprintln(output, "--to    Filter history through this date")
 		fmt.Fprintln(output, "--fuel  Filter history by fuel")
+	case "wheel status":
+		fmt.Fprintln(output, "Usage: octo-cli wheel status")
 	}
 }

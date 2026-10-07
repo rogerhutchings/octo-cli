@@ -156,3 +156,22 @@ func Run(ctx context.Context, client *octopus.Client, accountNumber string, exec
 	}
 	return nil
 }
+
+// RunStatus prints the current allowance without attempting to use any spins.
+func RunStatus(ctx context.Context, client *octopus.Client, accountNumber string, results io.Writer) error {
+	spins, err := fetchAvailableSpins(ctx, client, accountNumber)
+	if err != nil {
+		return fmt.Errorf("fetch wheel status: %w", err)
+	}
+	if _, err := fmt.Fprintf(results, "Available spins: %s, %s.\n",
+		formatSpinCount("ELECTRICITY", spins.remaining("ELECTRICITY")),
+		formatSpinCount("GAS", spins.remaining("GAS"))); err != nil {
+		return fmt.Errorf("write wheel status: %w", err)
+	}
+	if spins.remaining("ELECTRICITY") == 0 && spins.remaining("GAS") == 0 {
+		if _, err := fmt.Fprintln(results, "No available spins."); err != nil {
+			return fmt.Errorf("write wheel status: %w", err)
+		}
+	}
+	return nil
+}

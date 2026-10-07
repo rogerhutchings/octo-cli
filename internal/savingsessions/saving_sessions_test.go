@@ -28,11 +28,12 @@ func TestFindCandidateSavingSessions(t *testing.T) {
 		{
 			name: "future session in matching region",
 			event: savingSessionEvent{
-				ID:        1,
-				Code:      "MATCHING_REGION",
-				StartAt:   now.Add(time.Hour),
-				EndAt:     now.Add(2 * time.Hour),
-				EventType: savingSessionEventType,
+				ID:             1,
+				Code:           "MATCHING_REGION",
+				StartAt:        now.Add(time.Hour),
+				EndAt:          now.Add(2 * time.Hour),
+				EventType:      savingSessionEventType,
+				CapacityStatus: "FULL",
 				TargetRegion: []targetRegion{
 					{RegionID: accountRegionID},
 				},
@@ -112,26 +113,27 @@ func TestFindCandidateSavingSessions(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			savingSessions := savingSessionsData{}
-
-			savingSessions.SavingSessions.Account.SignedUpMeterPoint = &struct {
+			joinedEvents := make([]joinedSavingSession, 0, len(test.joinedEventIDs))
+			account := &savingSessionsAccount{SignedUpMeterPoint: &struct {
 				RegionID int64 `json:"regionId"`
 			}{
 				RegionID: accountRegionID,
-			}
-
-			savingSessions.SavingSessions.Events = []savingSessionEvent{
-				test.event,
-			}
+			}, JoinedEvents: &joinedEvents}
 
 			for _, joinedEventID := range test.joinedEventIDs {
-				savingSessions.SavingSessions.Account.JoinedEvents = append(
-					savingSessions.SavingSessions.Account.JoinedEvents,
+				joinedEvents = append(
+					joinedEvents,
 					joinedSavingSession{
 						EventID: joinedEventID,
 					},
 				)
 			}
+			account.JoinedEvents = &joinedEvents
+			events := []savingSessionEvent{test.event}
+			savingSessions := savingSessionsData{SavingSessions: &savingSessionsResult{
+				Events:  &events,
+				Account: account,
+			}}
 
 			candidates, err := findCandidateSavingSessions(
 				savingSessions,
@@ -162,16 +164,40 @@ func TestFindCandidateSavingSessions(t *testing.T) {
 }
 
 func TestFindCandidateSavingSessionsWithoutSignedUpMeterPoint(t *testing.T) {
-	savingSessions := savingSessionsData{}
+	joinedEvents := []joinedSavingSession{}
+	savingSessions := savingSessionsData{SavingSessions: &savingSessionsResult{
+		Events:  ptr([]savingSessionEvent{}),
+		Account: &savingSessionsAccount{JoinedEvents: &joinedEvents},
+	}}
 
-	_, err := findCandidateSavingSessions(
+	candidates, err := findCandidateSavingSessions(
 		savingSessions,
 		time.Now(),
 	)
 
 	if err == nil {
-		t.Fatal(
-			"findCandidateSavingSessions() returned no error, want missing meter point error",
-		)
+		t.Fatal("findCandidateSavingSessions() returned no error, want missing meter point error")
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("findCandidateSavingSessions() returned %d candidates without account data", len(candidates))
 	}
 }
+
+func TestFindCandidateSavingSessionsWithUnknownJoinedStatus(t *testing.T) {
+	events := []savingSessionEvent{{
+		ID: 1, Code: "UPCOMING", StartAt: time.Now().Add(time.Hour), EventType: savingSessionEventType,
+	}}
+	savingSessions := savingSessionsData{SavingSessions: &savingSessionsResult{
+		Events: &events,
+		Account: &savingSessionsAccount{SignedUpMeterPoint: &struct {
+			RegionID int64 `json:"regionId"`
+		}{RegionID: 10}},
+	}}
+
+	candidates, err := findCandidateSavingSessions(savingSessions, time.Now())
+	if err == nil || len(candidates) != 0 {
+		t.Fatalf("findCandidateSavingSessions() = %d candidates, %v; want error and no candidates", len(candidates), err)
+	}
+}
+
+func ptr[T any](value T) *T { return &value }

@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/rogerhutchings/octo-cli/internal/octopus"
@@ -34,16 +37,76 @@ type joinedSavingSession struct {
 }
 
 type savingSessionsData struct {
-	SavingSessions struct {
-		Events  []savingSessionEvent `json:"events"`
-		Account struct {
-			HasJoinedCampaign  bool `json:"hasJoinedCampaign"`
-			SignedUpMeterPoint *struct {
-				RegionID int64 `json:"regionId"`
-			} `json:"signedUpMeterPoint"`
-			JoinedEvents []joinedSavingSession `json:"joinedEvents"`
-		} `json:"account"`
-	} `json:"savingSessions"`
+	SavingSessions *savingSessionsResult `json:"savingSessions"`
+}
+
+type savingSessionsResult struct {
+	Events  *[]savingSessionEvent  `json:"events"`
+	Account *savingSessionsAccount `json:"account"`
+}
+
+type savingSessionsAccount struct {
+	SignedUpMeterPoint *struct {
+		RegionID int64 `json:"regionId"`
+	} `json:"signedUpMeterPoint"`
+	JoinedEvents *[]joinedSavingSession `json:"joinedEvents"`
+}
+
+type sessionAssessment struct {
+	event     savingSessionEvent
+	eligible  bool
+	joined    bool
+	joinKnown bool
+	reasons   []string
+}
+
+// RunList shows every upcoming event and its join eligibility without joining.
+func RunList(ctx context.Context, client *octopus.Client, accountNumber string, results io.Writer) error {
+	data, err := fetchSavingSessions(ctx, client, accountNumber)
+	if err != nil {
+		return fmt.Errorf("fetch saving sessions: %w", err)
+	}
+	assessments := assessUpcomingSavingSessions(data, time.Now())
+	sort.SliceStable(assessments, func(i, j int) bool {
+		return assessments[i].event.StartAt.Before(assessments[j].event.StartAt)
+	})
+	if len(assessments) == 0 {
+		if _, err := fmt.Fprintln(results, "No upcoming Saving Sessions found."); err != nil {
+			return fmt.Errorf("write Saving Sessions list: %w", err)
+		}
+		return nil
+	}
+	table := tabwriter.NewWriter(results, 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(table, "CODE\tSTART\tEND\tEVENT TYPE\tJOINED\tELIGIBILITY"); err != nil {
+		return fmt.Errorf("write Saving Sessions list: %w", err)
+	}
+	for _, assessment := range assessments {
+		joined := "unknown"
+		if assessment.joinKnown {
+			joined = "no"
+		}
+		if assessment.joined {
+			joined = "yes"
+		}
+		eligibility := "eligible"
+		if !assessment.eligible {
+			eligibility = "ineligible: " + strings.Join(assessment.reasons, ", ")
+		}
+		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			assessment.event.Code,
+			assessment.event.StartAt.Format("2006-01-02 15:04 MST"),
+			assessment.event.EndAt.Format("2006-01-02 15:04 MST"),
+			assessment.event.EventType,
+			joined,
+			eligibility,
+		); err != nil {
+			return fmt.Errorf("write Saving Sessions list: %w", err)
+		}
+	}
+	if err := table.Flush(); err != nil {
+		return fmt.Errorf("write Saving Sessions list: %w", err)
+	}
+	return nil
 }
 
 func Run(ctx context.Context, client *octopus.Client, accountNumber string, execute bool, results io.Writer) error {
@@ -140,7 +203,6 @@ func fetchSavingSessions(
 					signedUpMeterPoint {
 						regionId
 					}
-					hasJoinedCampaign
 					joinedEvents {
 						eventId
 						startAt
@@ -163,6 +225,9 @@ func fetchSavingSessions(
 	if err != nil {
 		return savingSessionsData{}, err
 	}
+	if responseData.SavingSessions == nil || responseData.SavingSessions.Events == nil {
+		return savingSessionsData{}, errors.New("Octopus returned incomplete Saving Sessions data")
+	}
 
 	return responseData, nil
 }
@@ -171,44 +236,68 @@ func findCandidateSavingSessions(
 	savingSessions savingSessionsData,
 	now time.Time,
 ) ([]savingSessionEvent, error) {
+	if savingSessions.SavingSessions == nil || savingSessions.SavingSessions.Events == nil {
+		return nil, errors.New("Octopus returned incomplete Saving Sessions data")
+	}
 	account := savingSessions.SavingSessions.Account
-
+	if account == nil {
+		return nil, errors.New("account data is unavailable")
+	}
 	if account.SignedUpMeterPoint == nil {
 		return nil, errors.New("account has no signed-up meter point")
 	}
-
-	joinedEventIDs := make(map[int64]struct{}, len(account.JoinedEvents))
-
-	for _, joinedEvent := range account.JoinedEvents {
-		joinedEventIDs[joinedEvent.EventID] = struct{}{}
+	if account.JoinedEvents == nil {
+		return nil, errors.New("account joined-session status is unavailable")
 	}
-
+	assessments := assessUpcomingSavingSessions(savingSessions, now)
 	candidates := make([]savingSessionEvent, 0)
-
-	for _, event := range savingSessions.SavingSessions.Events {
-		if event.EventType != savingSessionEventType {
-			continue
+	for _, assessment := range assessments {
+		if assessment.eligible {
+			candidates = append(candidates, assessment.event)
 		}
+	}
+	return candidates, nil
+}
 
+func assessUpcomingSavingSessions(data savingSessionsData, now time.Time) []sessionAssessment {
+	if data.SavingSessions == nil || data.SavingSessions.Events == nil {
+		return nil
+	}
+	account := data.SavingSessions.Account
+	var joinedEventIDs map[int64]struct{}
+	if account != nil && account.JoinedEvents != nil {
+		joinedEventIDs = make(map[int64]struct{}, len(*account.JoinedEvents))
+		for _, joinedEvent := range *account.JoinedEvents {
+			joinedEventIDs[joinedEvent.EventID] = struct{}{}
+		}
+	}
+	assessments := make([]sessionAssessment, 0)
+	for _, event := range *data.SavingSessions.Events {
 		if !event.StartAt.After(now) {
 			continue
 		}
-
-		if _, alreadyJoined := joinedEventIDs[event.ID]; alreadyJoined {
-			continue
+		assessment := sessionAssessment{event: event, eligible: true}
+		if event.EventType != savingSessionEventType {
+			assessment.reasons = append(assessment.reasons, "event type is not TURN_DOWN")
 		}
-
-		if !eventAppliesToRegion(
-			event,
-			account.SignedUpMeterPoint.RegionID,
-		) {
-			continue
+		if account == nil || account.SignedUpMeterPoint == nil {
+			assessment.reasons = append(assessment.reasons, "account region is unavailable")
+		} else if !eventAppliesToRegion(event, account.SignedUpMeterPoint.RegionID) {
+			assessment.reasons = append(assessment.reasons, "session is outside the account region")
 		}
-
-		candidates = append(candidates, event)
+		if account == nil || account.JoinedEvents == nil {
+			assessment.reasons = append(assessment.reasons, "joined status is unknown")
+		} else {
+			assessment.joinKnown = true
+			_, assessment.joined = joinedEventIDs[event.ID]
+		}
+		if assessment.joined {
+			assessment.reasons = append(assessment.reasons, "already joined")
+		}
+		assessment.eligible = len(assessment.reasons) == 0
+		assessments = append(assessments, assessment)
 	}
-
-	return candidates, nil
+	return assessments
 }
 
 func eventAppliesToRegion(

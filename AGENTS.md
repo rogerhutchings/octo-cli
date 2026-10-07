@@ -44,7 +44,9 @@ The agreed command interface after the restructure is:
 
 ```text
 octo-cli saving-sessions join [--execute]
+octo-cli saving-sessions list
 octo-cli wheel spin [--execute]
+octo-cli wheel status
 octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity|gas]
 ```
 
@@ -56,6 +58,8 @@ octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity
   credentials or making requests.
 - Account-changing commands default to a dry run and require `--execute` to
   change account state. Read-only commands reject `--execute`.
+- `saving-sessions list` shows upcoming sessions and their eligibility reasons;
+  `wheel status` shows available electricity and gas spins. Both are read-only.
 - Results belong on stdout; diagnostic logs and errors belong on stderr.
 - No eligible sessions, no available spins and empty history are successful
   outcomes, with clear output.
@@ -63,8 +67,8 @@ octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity
   failures.
 - Old flat commands and the implicit Saving Sessions action need no aliases
   after the agreed breaking restructure.
-- `wheel status`, `saving-sessions list`, JSON output and scratchcards are
-  separate future tasks. Do not add placeholders or unsupported commands.
+- JSON output and scratchcards are separate future tasks. Do not add
+  placeholders or unsupported commands.
 
 ## Configuration and credentials
 
