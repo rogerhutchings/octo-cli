@@ -2,7 +2,7 @@
 
 ## Project
 
-`octo-cli` is a small Go CLI for Octopus Energy account tasks: Saving Sessions, Wheel of Fortune spins and spin history. It runs once per invocation; systemd timers provide scheduling outside the application.
+`octo-cli` is a small Go CLI for Octopus Energy account tasks: Saving Sessions, Wheel of Fortune spins and spin history, and read-only Scratchcard status. It runs once per invocation; systemd timers provide scheduling outside the application.
 
 The project was renamed from `octopus-autojoin` to `octo-cli`. Follow the current task when working across that transition. Do not treat planned commands as already implemented, or implement roadmap features without a request.
 
@@ -36,6 +36,7 @@ octo-cli saving-sessions list
 octo-cli wheel spin [--execute] [--max-spins N]
 octo-cli wheel status
 octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity|gas]
+octo-cli scratchcard status
 ```
 
 - Bare root and group commands show help and exit successfully.
@@ -43,12 +44,12 @@ octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity
 - Flags follow the leaf command and apply only to that command.
 - Reject invalid commands, arguments, filters and date ranges before loading credentials or making requests.
 - Account-changing commands default to a dry run and require `--execute` to change account state. Read-only commands reject `--execute`.
-- `saving-sessions list` shows upcoming sessions and their eligibility reasons; `wheel status` shows available electricity and gas spins. Both are read-only.
+- `saving-sessions list` shows upcoming sessions and their eligibility reasons; `wheel status` shows available electricity and gas spins; `scratchcard status` reports active Scratchcard information exposed by Octopus's authenticated backend. These commands are read-only.
 - Results belong on stdout; diagnostic logs and errors belong on stderr.
 - No eligible sessions, no available spins and empty history are successful outcomes, with clear output.
 - Preserve exit codes: 0 for success/help, 2 for usage errors, 1 for operational failures.
 - Old flat commands and the implicit Saving Sessions action need no aliases after the agreed breaking restructure.
-- JSON output and scratchcards are separate future tasks. Do not add placeholders or unsupported commands.
+- JSON output and Scratchcard participation are separate future tasks. Do not add placeholders or unsupported commands.
 
 ## Configuration and credentials
 

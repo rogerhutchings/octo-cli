@@ -14,18 +14,20 @@ import (
 	"github.com/rogerhutchings/octo-cli/internal/config"
 	"github.com/rogerhutchings/octo-cli/internal/octopus"
 	"github.com/rogerhutchings/octo-cli/internal/savingsessions"
+	"github.com/rogerhutchings/octo-cli/internal/scratchcard"
 	"github.com/rogerhutchings/octo-cli/internal/wheeloffortune"
 )
 
 type Dependencies struct {
-	LoadConfig   func() (config.Config, error)
-	NewClient    func(*http.Client) *octopus.Client
-	Authenticate func(context.Context, *octopus.Client, string) error
-	RunJoin      func(context.Context, *octopus.Client, string, bool, io.Writer) error
-	RunSpin      func(context.Context, *octopus.Client, string, bool, int, io.Writer) error
-	RunStatus    func(context.Context, *octopus.Client, string, io.Writer) error
-	RunHistory   func(context.Context, *octopus.Client, string, wheeloffortune.HistoryFilter, io.Writer) error
-	RunList      func(context.Context, *octopus.Client, string, io.Writer) error
+	LoadConfig           func() (config.Config, error)
+	NewClient            func(*http.Client) *octopus.Client
+	Authenticate         func(context.Context, *octopus.Client, string) error
+	RunJoin              func(context.Context, *octopus.Client, string, bool, io.Writer) error
+	RunSpin              func(context.Context, *octopus.Client, string, bool, int, io.Writer) error
+	RunStatus            func(context.Context, *octopus.Client, string, io.Writer) error
+	RunHistory           func(context.Context, *octopus.Client, string, wheeloffortune.HistoryFilter, io.Writer) error
+	RunList              func(context.Context, *octopus.Client, string, io.Writer) error
+	RunScratchcardStatus func(context.Context, *octopus.Client, string, io.Writer) error
 }
 
 func DefaultDependencies() Dependencies {
@@ -35,11 +37,12 @@ func DefaultDependencies() Dependencies {
 		Authenticate: func(ctx context.Context, client *octopus.Client, key string) error {
 			return client.Authenticate(ctx, key)
 		},
-		RunJoin:    savingsessions.Run,
-		RunSpin:    wheeloffortune.Run,
-		RunStatus:  wheeloffortune.RunStatus,
-		RunHistory: wheeloffortune.RunHistory,
-		RunList:    savingsessions.RunList,
+		RunJoin:              savingsessions.Run,
+		RunSpin:              wheeloffortune.Run,
+		RunStatus:            wheeloffortune.RunStatus,
+		RunHistory:           wheeloffortune.RunHistory,
+		RunList:              savingsessions.RunList,
+		RunScratchcardStatus: scratchcard.RunStatus,
 	}
 }
 
@@ -104,12 +107,16 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 			printWheelHelp(output)
 			return command{}, true, false, nil
 		}
-		return command{}, false, false, fmt.Errorf("unknown command %q; use saving-sessions or wheel", args[0])
+		if args[0] == "scratchcard" {
+			printScratchcardHelp(output)
+			return command{}, true, false, nil
+		}
+		return command{}, false, false, fmt.Errorf("unknown command %q; use saving-sessions, wheel or scratchcard", args[0])
 	}
 
 	group, leaf := args[0], args[1]
-	if group != "saving-sessions" && group != "wheel" {
-		return command{}, false, false, fmt.Errorf("unknown command %q; use saving-sessions or wheel", group)
+	if group != "saving-sessions" && group != "wheel" && group != "scratchcard" {
+		return command{}, false, false, fmt.Errorf("unknown command %q; use saving-sessions, wheel or scratchcard", group)
 	}
 	if isHelp(leaf) {
 		if len(args) != 2 {
@@ -117,12 +124,14 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 		}
 		if group == "saving-sessions" {
 			printSavingHelp(output)
-		} else {
+		} else if group == "wheel" {
 			printWheelHelp(output)
+		} else {
+			printScratchcardHelp(output)
 		}
 		return command{}, true, false, nil
 	}
-	if (group == "saving-sessions" && leaf != "join" && leaf != "list") || (group == "wheel" && leaf != "spin" && leaf != "history" && leaf != "status") {
+	if (group == "saving-sessions" && leaf != "join" && leaf != "list") || (group == "wheel" && leaf != "spin" && leaf != "history" && leaf != "status") || (group == "scratchcard" && leaf != "status") {
 		return command{}, false, false, fmt.Errorf("unknown command %q under %q", leaf, group)
 	}
 
@@ -216,6 +225,8 @@ func execute(selected command, logger *slog.Logger, stdout io.Writer, deps Depen
 		return deps.RunStatus(ctx, client, appConfig.AccountNumber, stdout)
 	case "saving-sessions list":
 		return deps.RunList(ctx, client, appConfig.AccountNumber, stdout)
+	case "scratchcard status":
+		return deps.RunScratchcardStatus(ctx, client, appConfig.AccountNumber, stdout)
 	default:
 		return fmt.Errorf("unsupported command %q", selected.path)
 	}
@@ -232,6 +243,7 @@ func printRootHelp(output io.Writer) {
 	fmt.Fprintln(output, "\nCommands:")
 	fmt.Fprintln(output, "  saving-sessions  Saving Sessions commands")
 	fmt.Fprintln(output, "  wheel            Wheel of Fortune commands")
+	fmt.Fprintln(output, "  scratchcard      Scratchcard status")
 	fmt.Fprintln(output, "\nUse octo-cli <command> --help for command help.")
 	fmt.Fprintln(output, "Global flags: --help, --version")
 }
@@ -247,6 +259,11 @@ func printWheelHelp(output io.Writer) {
 	fmt.Fprintln(output, "  spin     Check or use available spins")
 	fmt.Fprintln(output, "  status   Show available spins")
 	fmt.Fprintln(output, "  history  Show Wheel of Fortune history")
+}
+
+func printScratchcardHelp(output io.Writer) {
+	fmt.Fprintln(output, "Usage: octo-cli scratchcard <command> [flags]")
+	fmt.Fprintln(output, "\nCommands:\n  status  Show the active Scratchcard session and card status")
 }
 
 func printLeafHelp(output io.Writer, path string) {
@@ -267,5 +284,7 @@ func printLeafHelp(output io.Writer, path string) {
 		fmt.Fprintln(output, "--fuel  Filter history by fuel")
 	case "wheel status":
 		fmt.Fprintln(output, "Usage: octo-cli wheel status")
+	case "scratchcard status":
+		fmt.Fprintln(output, "Usage: octo-cli scratchcard status")
 	}
 }

@@ -51,6 +51,11 @@ func testDependencies() (Dependencies, *int, *[]string) {
 			_, err := fmt.Fprintln(results, "list result")
 			return err
 		},
+		RunScratchcardStatus: func(_ context.Context, _ *octopus.Client, account string, results io.Writer) error {
+			calls = append(calls, "scratchcard-status:"+account)
+			_, err := fmt.Fprintln(results, "scratchcard status result")
+			return err
+		},
 	}
 	return deps, &loads, &calls
 }
@@ -73,6 +78,8 @@ func TestHelpAndVersionDoNotLoadConfiguration(t *testing.T) {
 		{name: "saving group help", args: []string{"saving-sessions", "--help"}, want: "join"},
 		{name: "saving list help", args: []string{"saving-sessions", "list", "--help"}, want: "saving-sessions list"},
 		{name: "wheel group help", args: []string{"wheel"}, want: "history"},
+		{name: "scratchcard group help", args: []string{"scratchcard"}, want: "status"},
+		{name: "scratchcard status help", args: []string{"scratchcard", "status", "--help"}, want: "scratchcard status"},
 		{name: "wheel status help", args: []string{"wheel", "status", "--help"}, want: "wheel status"},
 		{name: "saving leaf help", args: []string{"saving-sessions", "join", "--help"}, want: "[--execute]"},
 		{name: "leaf help", args: []string{"wheel", "spin", "--help"}, want: "--max-spins"},
@@ -104,6 +111,8 @@ func TestInvalidCommandsFailBeforeConfiguration(t *testing.T) {
 		{"saving-sessions", "list", "--from", "2026-01-01"},
 		{"wheel", "status", "--execute"},
 		{"wheel", "status", "--fuel", "gas"},
+		{"scratchcard", "status", "--execute"},
+		{"scratchcard", "play"},
 		{"wheel", "spin", "--from", "2026-01-01"},
 		{"wheel", "history", "--execute"},
 		{"wheel", "history", "unexpected"},
@@ -146,6 +155,7 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 		{args: []string{"wheel", "history", "--from", "2026-01-01", "--to", "2026-01-31", "--fuel", "gas"}, want: "history:A-TEST:2026-01-01:2026-01-31:GAS"},
 		{args: []string{"saving-sessions", "list"}, want: "list:A-TEST"},
 		{args: []string{"wheel", "status"}, want: "status:A-TEST"},
+		{args: []string{"scratchcard", "status"}, want: "scratchcard-status:A-TEST"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			deps, loads, calls := testDependencies()
@@ -172,7 +182,7 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 }
 
 func TestBareGroupsPrintHelpWithoutConfiguration(t *testing.T) {
-	for _, args := range [][]string{{"saving-sessions"}, {"wheel"}} {
+	for _, args := range [][]string{{"saving-sessions"}, {"wheel"}, {"scratchcard"}} {
 		deps, loads, _ := testDependencies()
 		var stdout, stderr strings.Builder
 		if code := Run(args, &stdout, &stderr, "dev", deps); code != 0 {

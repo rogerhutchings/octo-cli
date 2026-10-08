@@ -6,15 +6,16 @@
 [![Go](https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
 
 
-`octo-cli` is a Go command-line application for a small set of Octopus Energy account tasks. It can list and join eligible Saving Sessions, check Wheel of Fortune allowances, use spins and inspect spin history. It is an independent project and is not affiliated with or endorsed by Octopus Energy.
+`octo-cli` is a Go command-line application for a small set of Octopus Energy account tasks. It can list and join eligible Saving Sessions, check Wheel of Fortune allowances, use spins, inspect spin history and report Scratchcard status. It is an independent project and is not affiliated with or endorsed by Octopus Energy.
 
 ## Features
 
 - **Saving Sessions:** list upcoming sessions with eligibility reasons and join eligible sessions.
 - **Wheel of Fortune:** check electricity and gas allowances, use available spins and inspect spin history.
+- **Scratchcard:** view active session and card status exposed by Octopus's authenticated backend.
 - **Dry-run defaults:** account-changing commands only make changes when you pass `--execute`.
 
-The Scratchcard schema investigation is recorded in [implementation-report.md](implementation-report.md); no Scratchcard command or mutation is implemented.
+Scratchcard status is read-only. Scratchcard participation is not implemented.
 
 ## Installation
 
@@ -57,6 +58,7 @@ octo-cli saving-sessions list
 octo-cli wheel spin [--execute] [--max-spins N]
 octo-cli wheel status
 octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity|gas]
+octo-cli scratchcard status
 ```
 
 For example:
@@ -76,9 +78,12 @@ octo-cli wheel spin --execute --max-spins 1
 
 # Review January electricity spin history
 octo-cli wheel history --from 2026-01-01 --to 2026-01-31 --fuel electricity
+
+# Check the active Scratchcard session and status
+octo-cli scratchcard status
 ```
 
-`join` and `spin` are dry runs unless `--execute` is supplied. `saving-sessions list`, `wheel status` and `wheel history` are read-only. The Saving Sessions commands consider upcoming `TURN_DOWN` events for the account's region that have not already been joined; `list` also shows ineligible upcoming events and their reasons.
+`join` and `spin` are dry runs unless `--execute` is supplied. `saving-sessions list`, `wheel status`, `wheel history` and `scratchcard status` are read-only. Scratchcard status reports information exposed by Octopus's authenticated backend; a missing Scratchcard does not confirm that a play is available. The Saving Sessions commands consider upcoming `TURN_DOWN` events for the account's region that have not already been joined; `list` also shows ineligible upcoming events and their reasons.
 
 `--max-spins N` sets a positive limit across electricity and gas combined for one invocation. Electricity spins are used first. If the option is omitted, `wheel spin` can use the available allowance for both fuels. `wheel status` shows the current allowance, and `wheel history` can filter records by date and fuel.
 
