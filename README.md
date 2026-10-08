@@ -68,7 +68,7 @@ These instructions install the current Linux amd64 release. Download a different
 ### Install the binary and service account
 
 ```sh
-curl -fL https://github.com/rogerhutchings/octopus-autojoin/releases/latest/download/octo-cli-linux-amd64 \
+curl -fL https://github.com/rogerhutchings/octo-cli/releases/latest/download/octo-cli-linux-amd64 \
   -o /tmp/octo-cli
 sudo install -m 0755 /tmp/octo-cli /usr/local/bin/octo-cli
 rm /tmp/octo-cli
@@ -79,7 +79,7 @@ sudo useradd --system --user-group \
   octo-cli
 ```
 
-The GitHub repository remains named `octopus-autojoin`; release binaries use the `octo-cli` name.
+The GitHub repository is [rogerhutchings/octo-cli](https://github.com/rogerhutchings/octo-cli).
 
 ### Configure credentials
 
@@ -152,7 +152,7 @@ Type=oneshot
 User=octo-cli
 Group=octo-cli
 EnvironmentFile=/etc/octo-cli/environment
-ExecStart=/usr/local/bin/octo-cli wheel spin --execute
+ExecStart=/usr/local/bin/octo-cli wheel spin --execute --max-spins 1
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -166,8 +166,7 @@ Create `/etc/systemd/system/octo-cli-wheel.timer`:
 Description=Check Octopus Wheel of Fortune daily
 
 [Timer]
-OnCalendar=*-*-* 09:00:00 Europe/London
-RandomizedDelaySec=15m
+OnCalendar=*-*-* 04:17:00 Europe/London
 Persistent=true
 Unit=octo-cli-wheel.service
 
@@ -175,7 +174,7 @@ Unit=octo-cli-wheel.service
 WantedBy=timers.target
 ```
 
-Saving Sessions runs every 20 minutes. The wheel check runs daily between 09:00 and 09:15 UK time. `Persistent=true` allows a missed run to happen when the timer next starts. Systemd prevents overlapping runs of the same service; separate CLI processes do not share a lock.
+Saving Sessions runs every 20 minutes. The wheel check runs daily at 04:17 Europe/London and uses at most one spin across electricity and gas per invocation. `--max-spins 1` caps the combined allowance; electricity remains first. `Persistent=true` allows a missed run to happen when the timer next starts. Systemd prevents overlapping runs of the same service; separate CLI processes do not share a lock.
 
 ### Run dry runs, then enable timers
 
@@ -244,7 +243,7 @@ sudo systemctl enable --now octo-cli-saving-sessions.timer
 sudo systemctl enable --now octo-cli-wheel.timer
 ```
 
-The remote GitHub repository remains `rogerhutchings/octopus-autojoin`; repository renaming and remote changes are manual follow-up steps. Update any external deployment automation to install `octo-cli` and use the new unit names.
+The GitHub repository is [rogerhutchings/octo-cli](https://github.com/rogerhutchings/octo-cli). Update external deployment automation to install `octo-cli` and use the new unit names.
 
 ## Development
 

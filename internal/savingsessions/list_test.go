@@ -18,6 +18,7 @@ func TestRunList(t *testing.T) {
 	date := func(offset time.Duration) string { return now.Add(offset).Format(time.RFC3339) }
 	for _, test := range []struct {
 		name, data, want string
+		wantEligibility  string
 		wantError        bool
 	}{
 		{
@@ -35,9 +36,28 @@ func TestRunList(t *testing.T) {
 			want: "EARLIER",
 		},
 		{
-			name: "unknown account information is not eligible",
-			data: fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":10,"code":"UNKNOWN_ACCOUNT","startAt":%q,"endAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":null,"joinedEvents":[]}}}}`, date(time.Hour), date(2*time.Hour)),
-			want: "account region is unavailable",
+			name:            "unknown account information is not eligible",
+			data:            fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":10,"code":"UNKNOWN_ACCOUNT","startAt":%q,"endAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":null,"joinedEvents":[]}}}}`, date(time.Hour), date(2*time.Hour)),
+			want:            "account region is unavailable",
+			wantEligibility: "ineligible: account region is unavailable",
+		},
+		{
+			name:            "omitted region id is unavailable with unrestricted event",
+			data:            fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":16,"code":"MISSING_REGION","startAt":%q,"endAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":{},"joinedEvents":[]}}}}`, date(time.Hour), date(2*time.Hour)),
+			want:            "MISSING_REGION",
+			wantEligibility: "ineligible: account region is unavailable",
+		},
+		{
+			name:            "null region id is unavailable with unrestricted event",
+			data:            fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":17,"code":"NULL_REGION","startAt":%q,"endAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":{"regionId":null},"joinedEvents":[]}}}}`, date(time.Hour), date(2*time.Hour)),
+			want:            "NULL_REGION",
+			wantEligibility: "ineligible: account region is unavailable",
+		},
+		{
+			name:            "explicit zero region id remains known",
+			data:            fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":18,"code":"ZERO_REGION","startAt":%q,"endAt":%q,"eventType":"TURN_DOWN","targetRegion":[{"regionId":0}]}],"account":{"signedUpMeterPoint":{"regionId":0},"joinedEvents":[]}}}}`, date(time.Hour), date(2*time.Hour)),
+			want:            "ZERO_REGION",
+			wantEligibility: "eligible",
 		},
 		{
 			name: "null account has unknown eligibility",
@@ -97,6 +117,12 @@ func TestRunList(t *testing.T) {
 			}
 			if test.want != "" && !strings.Contains(output.String(), test.want) {
 				t.Fatalf("output = %q, want %q", output.String(), test.want)
+			}
+			if test.wantEligibility != "" && !strings.Contains(output.String(), test.wantEligibility) {
+				t.Fatalf("output = %q, want eligibility %q", output.String(), test.wantEligibility)
+			}
+			if test.name == "explicit zero region id remains known" && strings.Contains(output.String(), "ineligible:") {
+				t.Fatalf("explicit region ID zero was treated as missing: %q", output.String())
 			}
 			if mutations != 0 {
 				t.Fatalf("list sent %d mutations", mutations)

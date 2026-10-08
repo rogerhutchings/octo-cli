@@ -114,10 +114,8 @@ func TestFindCandidateSavingSessions(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			joinedEvents := make([]joinedSavingSession, 0, len(test.joinedEventIDs))
-			account := &savingSessionsAccount{SignedUpMeterPoint: &struct {
-				RegionID int64 `json:"regionId"`
-			}{
-				RegionID: accountRegionID,
+			account := &savingSessionsAccount{SignedUpMeterPoint: &signedUpMeterPoint{
+				RegionID: ptr(accountRegionID),
 			}, JoinedEvents: &joinedEvents}
 
 			for _, joinedEventID := range test.joinedEventIDs {
@@ -188,10 +186,8 @@ func TestFindCandidateSavingSessionsWithUnknownJoinedStatus(t *testing.T) {
 		ID: 1, Code: "UPCOMING", StartAt: time.Now().Add(time.Hour), EventType: savingSessionEventType,
 	}}
 	savingSessions := savingSessionsData{SavingSessions: &savingSessionsResult{
-		Events: &events,
-		Account: &savingSessionsAccount{SignedUpMeterPoint: &struct {
-			RegionID int64 `json:"regionId"`
-		}{RegionID: 10}},
+		Events:  &events,
+		Account: &savingSessionsAccount{SignedUpMeterPoint: &signedUpMeterPoint{RegionID: ptr(int64(10))}},
 	}}
 
 	candidates, err := findCandidateSavingSessions(savingSessions, time.Now())

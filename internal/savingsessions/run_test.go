@@ -26,14 +26,20 @@ func TestRunWithSharedClient(t *testing.T) {
 		execute, confirmed bool
 		unknownJoined      bool
 		nullAccount        bool
+		missingRegion      bool
+		nullRegion         bool
 		wantJoins          int
 		wantError          bool
+		wantErrorContains  string
 	}{
 		{name: "dry run"},
 		{name: "execute", execute: true, confirmed: true, wantJoins: 1},
 		{name: "missing confirmation", execute: true, wantJoins: 1, wantError: true},
 		{name: "unknown joined status", execute: true, unknownJoined: true, wantError: true},
 		{name: "null account prevents join", execute: true, nullAccount: true, wantError: true},
+		{name: "missing region prevents execute join", execute: true, missingRegion: true, wantError: true, wantErrorContains: "account region is unavailable"},
+		{name: "null region prevents execute join", execute: true, nullRegion: true, wantError: true, wantErrorContains: "account region is unavailable"},
+		{name: "missing region keeps dry run conservative", missingRegion: true, wantError: true, wantErrorContains: "account region is unavailable"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			joins := 0
@@ -69,7 +75,14 @@ func TestRunWithSharedClient(t *testing.T) {
 							if test.unknownJoined {
 								joinedEvents = `null`
 							}
-							body = fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":1,"code":"EVENT_TEST","startAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":{"regionId":10},"joinedEvents":%s}}}}`, time.Now().Add(time.Hour).Format(time.RFC3339), joinedEvents)
+							regionField := `"regionId":10`
+							if test.missingRegion {
+								regionField = ""
+							}
+							if test.nullRegion {
+								regionField = `"regionId":null`
+							}
+							body = fmt.Sprintf(`{"data":{"savingSessions":{"events":[{"id":1,"code":"EVENT_TEST","startAt":%q,"eventType":"TURN_DOWN","targetRegion":[]}],"account":{"signedUpMeterPoint":{%s},"joinedEvents":%s}}}}`, time.Now().Add(time.Hour).Format(time.RFC3339), regionField, joinedEvents)
 						}
 					}
 				}
@@ -87,7 +100,7 @@ func TestRunWithSharedClient(t *testing.T) {
 			if joins != test.wantJoins {
 				t.Fatalf("joins = %d, want %d", joins, test.wantJoins)
 			}
-			if !test.unknownJoined && !test.nullAccount && !strings.Contains(results.String(), "Eligible Saving Session:") {
+			if !test.unknownJoined && !test.nullAccount && !test.missingRegion && !test.nullRegion && !strings.Contains(results.String(), "Eligible Saving Session:") {
 				t.Fatalf("candidate result missing from output: %q", results.String())
 			}
 			if test.unknownJoined && (joins != 0 || strings.Contains(results.String(), "Eligible Saving Session:")) {
@@ -98,10 +111,16 @@ func TestRunWithSharedClient(t *testing.T) {
 					t.Fatalf("null account did not fail safely: joins=%d error=%v output=%q", joins, err, results.String())
 				}
 			}
+			if test.wantErrorContains != "" && (err == nil || !strings.Contains(err.Error(), test.wantErrorContains)) {
+				t.Fatalf("error = %v, want it to contain %q", err, test.wantErrorContains)
+			}
+			if (test.missingRegion || test.nullRegion) && strings.Contains(results.String(), "Eligible Saving Session:") {
+				t.Fatalf("unknown account region was presented as eligible: %q", results.String())
+			}
 			if test.execute && test.confirmed && !strings.Contains(results.String(), "Joined Saving Session:") {
 				t.Fatalf("joined result missing from output: %q", results.String())
 			}
-			if !test.execute && (!strings.Contains(results.String(), "Dry run:") || !strings.Contains(results.String(), "--execute to join eligible sessions")) {
+			if !test.execute && !test.missingRegion && !test.nullRegion && (!strings.Contains(results.String(), "Dry run:") || !strings.Contains(results.String(), "--execute to join eligible sessions")) {
 				t.Fatalf("actionable dry-run result missing from output: %q", results.String())
 			}
 		})

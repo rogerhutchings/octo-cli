@@ -45,11 +45,13 @@ type savingSessionsResult struct {
 	Account *savingSessionsAccount `json:"account"`
 }
 
+type signedUpMeterPoint struct {
+	RegionID *int64 `json:"regionId"`
+}
+
 type savingSessionsAccount struct {
-	SignedUpMeterPoint *struct {
-		RegionID int64 `json:"regionId"`
-	} `json:"signedUpMeterPoint"`
-	JoinedEvents *[]joinedSavingSession `json:"joinedEvents"`
+	SignedUpMeterPoint *signedUpMeterPoint    `json:"signedUpMeterPoint"`
+	JoinedEvents       *[]joinedSavingSession `json:"joinedEvents"`
 }
 
 type sessionAssessment struct {
@@ -246,6 +248,9 @@ func findCandidateSavingSessions(
 	if account.SignedUpMeterPoint == nil {
 		return nil, errors.New("account has no signed-up meter point")
 	}
+	if account.SignedUpMeterPoint.RegionID == nil {
+		return nil, errors.New("account region is unavailable")
+	}
 	if account.JoinedEvents == nil {
 		return nil, errors.New("account joined-session status is unavailable")
 	}
@@ -280,9 +285,9 @@ func assessUpcomingSavingSessions(data savingSessionsData, now time.Time) []sess
 		if event.EventType != savingSessionEventType {
 			assessment.reasons = append(assessment.reasons, "event type is not TURN_DOWN")
 		}
-		if account == nil || account.SignedUpMeterPoint == nil {
+		if account == nil || account.SignedUpMeterPoint == nil || account.SignedUpMeterPoint.RegionID == nil {
 			assessment.reasons = append(assessment.reasons, "account region is unavailable")
-		} else if !eventAppliesToRegion(event, account.SignedUpMeterPoint.RegionID) {
+		} else if !eventAppliesToRegion(event, *account.SignedUpMeterPoint.RegionID) {
 			assessment.reasons = append(assessment.reasons, "session is outside the account region")
 		}
 		if account == nil || account.JoinedEvents == nil {

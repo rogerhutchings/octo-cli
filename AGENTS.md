@@ -6,9 +6,9 @@
 Wheel of Fortune spins and spin history. It runs once per invocation; systemd
 timers provide scheduling outside the application.
 
-The project is being renamed from `octopus-autojoin`. Follow the current task
-when working across that transition. Do not treat planned commands as already
-implemented, or implement roadmap features without a request.
+The project was renamed from `octopus-autojoin` to `octo-cli`. Follow the
+current task when working across that transition. Do not treat planned commands
+as already implemented, or implement roadmap features without a request.
 
 ## Working approach
 
@@ -45,7 +45,7 @@ The agreed command interface after the restructure is:
 ```text
 octo-cli saving-sessions join [--execute]
 octo-cli saving-sessions list
-octo-cli wheel spin [--execute]
+octo-cli wheel spin [--execute] [--max-spins N]
 octo-cli wheel status
 octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity|gas]
 ```
