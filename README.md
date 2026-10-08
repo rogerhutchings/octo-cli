@@ -212,39 +212,6 @@ sudo journalctl -u octo-cli-wheel.service
 
 Starting either service directly performs account actions because the service commands include `--execute`.
 
-## Migration from octopus-autojoin
-
-Keep fresh installations separate from this section. On an existing host, disable the old timers before enabling the new timers so both schedules do not run together:
-
-```sh
-sudo systemctl disable --now octopus-autojoin.timer
-sudo systemctl disable --now octopus-wheel-of-fortune.timer
-```
-
-Install the renamed binary at `/usr/local/bin/octo-cli`, create the `octo-cli` service user/group, and install the new unit files from the fresh-install section. For the credential step, do not first create an empty new environment file. Transfer credentials without printing them. The following command copies the old environment file only if the new file does not already exist; it does not overwrite an existing destination:
-
-```sh
-sudo install -d -m 0755 /etc/octo-cli
-sudo sh -c 'test ! -e /etc/octo-cli/environment && install -o root -g root -m 0600 /etc/octopus-autojoin/environment /etc/octo-cli/environment'
-```
-
-If you stored credentials elsewhere, use a secure copy method that does not display the file or replace an existing destination. Confirm that the new environment file exists and has mode `0600` without printing its contents:
-
-```sh
-sudo test -f /etc/octo-cli/environment
-sudo stat -c '%a %U:%G %n' /etc/octo-cli/environment
-```
-
-Reload systemd and run the dry runs from the fresh-install section. Then enable the new timers:
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now octo-cli-saving-sessions.timer
-sudo systemctl enable --now octo-cli-wheel.timer
-```
-
-The GitHub repository is [rogerhutchings/octo-cli](https://github.com/rogerhutchings/octo-cli). Update external deployment automation to install `octo-cli` and use the new unit names.
-
 ## Development
 
 ```sh
