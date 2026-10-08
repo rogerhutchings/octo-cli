@@ -1,233 +1,95 @@
 # octo-cli
 
-`octo-cli` is a small Go command line tool for Octopus Energy account tasks. It can list upcoming Power Down Saving Sessions, join eligible sessions, show and use available Wheel of Fortune spins, and show Wheel of Fortune history.
+`octo-cli` is a Go command-line application for a small set of Octopus Energy account tasks. It can list and join eligible Saving Sessions, check Wheel of Fortune allowances, use spins and inspect spin history. It is an independent project and is not affiliated with or endorsed by Octopus Energy.
 
-Account changing commands default to a dry run. Help and version output do not require credentials or network access. Commands that contact Octopus require an API key and account number and can run unattended with systemd timers.
+## Features
 
-## Requirements and credentials
+- **Saving Sessions:** list upcoming sessions with eligibility reasons and join eligible sessions.
+- **Wheel of Fortune:** check electricity and gas allowances, use available spins and inspect spin history.
+- **Dry-run defaults:** account-changing commands only make changes when you pass `--execute`.
 
-Set these environment variables for commands that contact Octopus:
+The Scratchcard schema investigation is recorded in [implementation-report.md](implementation-report.md); no Scratchcard command or mutation is implemented.
 
-- `OCTOPUS_API_KEY`
-- `OCTOPUS_ACCOUNT_NUMBER`
+## Installation
 
-For local development, copy `.env.example` to `.env` and add the values. The application loads `./.env` when present. Values in the process environment take precedence over values in `.env`.
-
-On a systemd host, the services use `/etc/octo-cli/environment` as their environment file. The application reads environment variables and does not read this system file directly.
-
-Keep credentials private. Never commit `.env` or any file that contains real secrets.
-
-## Commands
-
-```sh
-# Print help or the injected build version. Neither needs credentials.
-octo-cli --help
-octo-cli --version
-
-# Join eligible Saving Sessions. This is a dry run unless --execute is set.
-octo-cli saving-sessions join
-octo-cli saving-sessions join --execute
-
-# List upcoming Saving Sessions and show why each can or cannot be joined.
-octo-cli saving-sessions list
-
-# Check available Wheel of Fortune spins, or use them with --execute.
-octo-cli wheel spin
-octo-cli wheel spin --execute
-octo-cli wheel spin --max-spins 1
-octo-cli wheel spin --execute --max-spins 1
-
-# Show available electricity and gas spins without taking action.
-octo-cli wheel status
-
-# Show Wheel of Fortune history, with optional date and fuel filters.
-octo-cli wheel history
-octo-cli wheel history --from 2026-01-01 --to 2026-01-31 --fuel electricity
-```
-
-Use `octo-cli saving-sessions --help` or `octo-cli wheel --help` for group help. `--execute` is available only for `join` and `spin`. `--max-spins N` is available only for `wheel spin` and requires a positive integer. It caps the total spins used across electricity and gas; electricity is used first. If omitted, the command keeps its existing behaviour and uses all available spins. A limit above the current allowance uses only the available spins. History flags are available only for `wheel history`; dates use `YYYY-MM-DD`, and fuel is `electricity` or `gas`. The `list` and `status` commands are read-only and reject `--execute`.
-
-History retrieves every matching page, sorts the results newest first, and prints timestamp, prize and prize type. It prefers the API's prize display text and uses the raw value only when display text is unavailable, without assigning a currency or points unit. Missing fields and empty history are shown clearly. If any page fails or is incomplete, the command exits with an error and does not print a partial table.
-
-### Saving Sessions behaviour
-
-The `list` command shows upcoming sessions in start-time order, including joined and ineligible sessions. Its eligibility label follows the CLI's current candidate filters: the session must start in the future, use the `TURN_DOWN` event type, apply to the account region, and not appear in the account's joined-event list. Missing region data is reported as unavailable; missing joined-event data is shown as unknown. Neither case is treated as eligible. Capacity and campaign participation do not affect the CLI's candidate selection. Empty results are successful. The join command uses the same assessment; eligible candidates, successful joins, dry-run outcomes and the no-eligible-sessions result print to stdout. When eligible sessions are available, a dry run explains that `--execute` joins them.
-
-### Wheel of Fortune behaviour
-
-The `status` and `spin` commands query the backend for the available allowance for each fuel. Status only reports electricity and gas counts; it never spins or prints a dry-run message. Counts use readable fuel names and singular or plural `spin` wording. No available spins is a successful result. When spins are available, a spin dry run explains that `--execute` uses them; with `--max-spins`, it also reports the capped number planned across both fuels. Electricity remains first. Each spin is followed by a fresh allowance check. The command stops if the count does not decrease, a response is incomplete, or an API request fails. It never attempts more spins per fuel than were available at the start of the run or more than the global limit. Spin mutations are not automatically retried because a timeout could mean the server used a spin but the response was lost. A later invocation checks the remaining allowance afresh.
-
-Status output, available spins, dry-run outcomes, successful spin results and no-action results print to stdout. If a later allowance request fails, earlier successful spin results remain in stdout. A successful spin can have no prize value; this is reported as `not returned` rather than treated as a failed spin. Errors print to stderr; successful authentication has no routine stderr message. The raw prize value is printed without an assumed points or currency unit. The command does not redeem Octopoints into account credit.
-
-Requests use `wheelOfFortuneSpinsAllowed` and `spinWheelOfFortune` at `https://api.backend.octopus.energy/v1/graphql/`, following the operations used by [Home Assistant Octopus Energy](https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy/blob/develop/custom_components/octopus_energy/api_client/__init__.py). These operations are covered by mocked API tests; run a dry run against your account before enabling execution.
-
-## Fresh systemd installation
-
-These instructions install the current Linux amd64 release. Download a different build if your host uses another architecture.
-
-### Install the binary and service account
+The [latest release](https://github.com/rogerhutchings/octo-cli/releases/latest) provides a Linux amd64 binary and a SHA-256 checksum. Download and verify the binary, then install it in a directory on your `PATH`:
 
 ```sh
 curl -fL https://github.com/rogerhutchings/octo-cli/releases/latest/download/octo-cli-linux-amd64 \
-  -o /tmp/octo-cli
-sudo install -m 0755 /tmp/octo-cli /usr/local/bin/octo-cli
-rm /tmp/octo-cli
-
-sudo useradd --system --user-group \
-  --home-dir /nonexistent \
-  --shell /usr/sbin/nologin \
-  octo-cli
+  -o /tmp/octo-cli-linux-amd64
+curl -fL https://github.com/rogerhutchings/octo-cli/releases/latest/download/octo-cli-linux-amd64.sha256 \
+  -o /tmp/octo-cli-linux-amd64.sha256
+(cd /tmp && sha256sum -c octo-cli-linux-amd64.sha256)
+sudo install -m 0755 /tmp/octo-cli-linux-amd64 /usr/local/bin/octo-cli
+rm /tmp/octo-cli-linux-amd64 /tmp/octo-cli-linux-amd64.sha256
 ```
 
-The GitHub repository is [rogerhutchings/octo-cli](https://github.com/rogerhutchings/octo-cli).
+To build from source, install the Go version declared in [`go.mod`](go.mod), then run `go build -o octo-cli .` from the repository. The release workflow currently publishes Linux amd64 only.
 
-### Configure credentials
+## Configuration
 
-Create the root-owned environment file and enter the existing Octopus credentials with `sudoedit`:
+Commands that contact Octopus require these credentials:
+
+| Variable | Purpose |
+| --- | --- |
+| `OCTOPUS_API_KEY` | Authenticates with Octopus Energy to obtain an API token. |
+| `OCTOPUS_ACCOUNT_NUMBER` | Selects the account used by the command. |
+
+For local use, copy the example file and add your own values:
 
 ```sh
-sudo install -d -m 0755 /etc/octo-cli
-sudo touch /etc/octo-cli/environment
-sudo chmod 0600 /etc/octo-cli/environment
-sudo chown root:root /etc/octo-cli/environment
-sudoedit /etc/octo-cli/environment
+cp .env.example .env
 ```
 
-The file must contain:
+Edit `.env` without sharing or committing it. Run `octo-cli` from the repository directory so it can load `./.env`. Values already set in the process environment take precedence over values in `.env`. You can also export the variables directly instead of using a file. Help and version commands do not need credentials.
 
-```ini
-OCTOPUS_API_KEY=your-api-key
-OCTOPUS_ACCOUNT_NUMBER=A-YOURACCOUNT
+## Usage
+
+```text
+octo-cli saving-sessions join [--execute]
+octo-cli saving-sessions list
+octo-cli wheel spin [--execute] [--max-spins N]
+octo-cli wheel status
+octo-cli wheel history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--fuel electricity|gas]
 ```
 
-### Install the Saving Sessions units
-
-Create `/etc/systemd/system/octo-cli-saving-sessions.service`:
-
-```ini
-[Unit]
-Description=Join eligible Octopus Saving Sessions
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=oneshot
-User=octo-cli
-Group=octo-cli
-EnvironmentFile=/etc/octo-cli/environment
-ExecStart=/usr/local/bin/octo-cli saving-sessions join --execute
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-```
-
-Create `/etc/systemd/system/octo-cli-saving-sessions.timer`:
-
-```ini
-[Unit]
-Description=Check Octopus Saving Sessions every 20 minutes
-
-[Timer]
-OnCalendar=*:00,20,40
-Persistent=true
-Unit=octo-cli-saving-sessions.service
-
-[Install]
-WantedBy=timers.target
-```
-
-### Install the Wheel of Fortune units
-
-Create `/etc/systemd/system/octo-cli-wheel.service`:
-
-```ini
-[Unit]
-Description=Use available Octopus Wheel of Fortune spins
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=oneshot
-User=octo-cli
-Group=octo-cli
-EnvironmentFile=/etc/octo-cli/environment
-ExecStart=/usr/local/bin/octo-cli wheel spin --execute --max-spins 1
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-```
-
-Create `/etc/systemd/system/octo-cli-wheel.timer`:
-
-```ini
-[Unit]
-Description=Check Octopus Wheel of Fortune daily
-
-[Timer]
-OnCalendar=*-*-* 04:17:00 Europe/London
-Persistent=true
-Unit=octo-cli-wheel.service
-
-[Install]
-WantedBy=timers.target
-```
-
-Saving Sessions runs every 20 minutes. The wheel check runs daily at 04:17 Europe/London and uses at most one spin across electricity and gas per invocation. `--max-spins 1` caps the combined allowance; electricity remains first. `Persistent=true` allows a missed run to happen when the timer next starts. Systemd prevents overlapping runs of the same service; separate CLI processes do not share a lock.
-
-### Run dry runs, then enable timers
-
-These commands use the service account and credentials, and omit `--execute`:
+For example:
 
 ```sh
-sudo systemd-run --wait --pipe --collect \
-  --property=User=octo-cli \
-  --property=Group=octo-cli \
-  --property=EnvironmentFile=/etc/octo-cli/environment \
-  /usr/local/bin/octo-cli saving-sessions join
+# Review upcoming Saving Sessions and their eligibility
+octo-cli saving-sessions list
 
-sudo systemd-run --wait --pipe --collect \
-  --property=User=octo-cli \
-  --property=Group=octo-cli \
-  --property=EnvironmentFile=/etc/octo-cli/environment \
-  /usr/local/bin/octo-cli wheel spin
+# Preview joining eligible sessions, then join them explicitly
+octo-cli saving-sessions join
+octo-cli saving-sessions join --execute
+
+# Check allowances, preview one spin, then use at most one spin
+octo-cli wheel status
+octo-cli wheel spin --max-spins 1
+octo-cli wheel spin --execute --max-spins 1
+
+# Review January electricity spin history
+octo-cli wheel history --from 2026-01-01 --to 2026-01-31 --fuel electricity
 ```
 
-After both dry runs succeed, load and enable the units:
+`join` and `spin` are dry runs unless `--execute` is supplied. `saving-sessions list`, `wheel status` and `wheel history` are read-only. The Saving Sessions commands consider upcoming `TURN_DOWN` events for the account's region that have not already been joined; `list` also shows ineligible upcoming events and their reasons.
 
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now octo-cli-saving-sessions.timer
-sudo systemctl enable --now octo-cli-wheel.timer
-```
+`--max-spins N` sets a positive limit across electricity and gas combined for one invocation. Electricity spins are used first. If the option is omitted, `wheel spin` can use the available allowance for both fuels. `wheel status` shows the current allowance, and `wheel history` can filter records by date and fuel.
 
-Check scheduled runs and logs with:
+Use `octo-cli --help` or `octo-cli <group> --help` for command help. History dates use `YYYY-MM-DD`.
 
-```sh
-systemctl list-timers 'octo-cli-*'
-sudo journalctl -u octo-cli-saving-sessions.service
-sudo journalctl -u octo-cli-wheel.service
-```
+## Automation
 
-Starting either service directly performs account actions because the service commands include `--execute`.
+`octo-cli` runs once and can be scheduled by an external service such as systemd. For unattended setup, schedules, credentials and operational commands, see [Automation and scheduling](AUTOMATION.md).
 
 ## Development
 
+Build and validate changes with:
+
 ```sh
-gofmt -w main.go internal/cli/*.go internal/config/*.go internal/octopus/*.go internal/savingsessions/*.go internal/wheeloffortune/*.go
+go build -o octo-cli .
 go test ./...
 go vet ./...
-go build -o octo-cli .
 ```
 
-The code is split into:
-
-- `main.go`: process entry point and version injection.
-- `internal/cli`: command parsing and dispatch.
-- `internal/config`: shared environment and `.env` loading.
-- `internal/octopus`: shared Kraken authentication and GraphQL HTTP client.
-- `internal/savingsessions`: Saving Sessions queries, eligibility filtering and joining.
-- `internal/wheeloffortune`: spin availability, execution and history.
-
-Feature packages share the authenticated client and own their API operations.
+See [AGENTS.md](AGENTS.md) for development and repository guidance.
