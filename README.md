@@ -1,5 +1,11 @@
 # octo-cli
 
+
+[![Release](https://img.shields.io/github/v/release/rogerhutchings/octo-cli?style=flat-square&logo=github&label=release)](https://github.com/rogerhutchings/octo-cli/releases)
+[![Release checks](https://img.shields.io/github/actions/workflow/status/rogerhutchings/octo-cli/release.yml?style=flat-square&label=release%20checks)](https://github.com/rogerhutchings/octo-cli/actions/workflows/release.yml)
+[![Go](https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
+
+
 `octo-cli` is a Go command-line application for a small set of Octopus Energy account tasks. It can list and join eligible Saving Sessions, check Wheel of Fortune allowances, use spins and inspect spin history. It is an independent project and is not affiliated with or endorsed by Octopus Energy.
 
 ## Features
