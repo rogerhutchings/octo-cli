@@ -34,6 +34,8 @@ octo-cli saving-sessions list
 # Check available Wheel of Fortune spins, or use them with --execute.
 octo-cli wheel spin
 octo-cli wheel spin --execute
+octo-cli wheel spin --max-spins 1
+octo-cli wheel spin --execute --max-spins 1
 
 # Show available electricity and gas spins without taking action.
 octo-cli wheel status
@@ -43,7 +45,7 @@ octo-cli wheel history
 octo-cli wheel history --from 2026-01-01 --to 2026-01-31 --fuel electricity
 ```
 
-Use `octo-cli saving-sessions --help` or `octo-cli wheel --help` for group help. `--execute` is available only for `join` and `spin`. History flags are available only for `wheel history`; dates use `YYYY-MM-DD`, and fuel is `electricity` or `gas`. The `list` and `status` commands are read-only and reject `--execute`.
+Use `octo-cli saving-sessions --help` or `octo-cli wheel --help` for group help. `--execute` is available only for `join` and `spin`. `--max-spins N` is available only for `wheel spin` and requires a positive integer. It caps the total spins used across electricity and gas; electricity is used first. If omitted, the command keeps its existing behaviour and uses all available spins. A limit above the current allowance uses only the available spins. History flags are available only for `wheel history`; dates use `YYYY-MM-DD`, and fuel is `electricity` or `gas`. The `list` and `status` commands are read-only and reject `--execute`.
 
 History retrieves every matching page, sorts the results newest first, and prints timestamp, prize and prize type. It prefers the API's prize display text and uses the raw value only when display text is unavailable, without assigning a currency or points unit. Missing fields and empty history are shown clearly. If any page fails or is incomplete, the command exits with an error and does not print a partial table.
 
@@ -53,7 +55,7 @@ The `list` command shows upcoming sessions in start-time order, including joined
 
 ### Wheel of Fortune behaviour
 
-The `status` and `spin` commands query the backend for the available allowance for each fuel. Status only reports electricity and gas counts; it never spins or prints a dry-run message. Counts use readable fuel names and singular or plural `spin` wording. No available spins is a successful result. When spins are available, a spin dry run explains that `--execute` uses them. Each spin is followed by a fresh allowance check. The command stops if the count does not decrease, a response is incomplete, or an API request fails. It never attempts more spins per fuel than were available at the start of the run. Spin mutations are not automatically retried because a timeout could mean the server used a spin but the response was lost. A later invocation checks the remaining allowance afresh.
+The `status` and `spin` commands query the backend for the available allowance for each fuel. Status only reports electricity and gas counts; it never spins or prints a dry-run message. Counts use readable fuel names and singular or plural `spin` wording. No available spins is a successful result. When spins are available, a spin dry run explains that `--execute` uses them; with `--max-spins`, it also reports the capped number planned across both fuels. Electricity remains first. Each spin is followed by a fresh allowance check. The command stops if the count does not decrease, a response is incomplete, or an API request fails. It never attempts more spins per fuel than were available at the start of the run or more than the global limit. Spin mutations are not automatically retried because a timeout could mean the server used a spin but the response was lost. A later invocation checks the remaining allowance afresh.
 
 Status output, available spins, dry-run outcomes, successful spin results and no-action results print to stdout. If a later allowance request fails, earlier successful spin results remain in stdout. A successful spin can have no prize value; this is reported as `not returned` rather than treated as a failed spin. Errors print to stderr; successful authentication has no routine stderr message. The raw prize value is printed without an assumed points or currency unit. The command does not redeem Octopoints into account credit.
 

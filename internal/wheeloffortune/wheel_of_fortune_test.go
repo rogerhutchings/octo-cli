@@ -57,6 +57,7 @@ func TestRun(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			electricity, gas := test.electricity, test.gas
 			spinCount, checks, authentications := 0, 0, 0
+			var spinFuels []string
 			client := octopus.NewClient(&http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				if request.Method != http.MethodPost || request.Header.Get("Content-Type") != "application/json" {
 					t.Fatalf("unexpected HTTP request: %s, %v", request.Method, request.Header)
@@ -97,6 +98,11 @@ func TestRun(t *testing.T) {
 						}
 					} else if strings.Contains(payload.Query, "spinWheelOfFortune") {
 						spinCount++
+						if strings.Contains(payload.Query, "fuelType: ELECTRICITY") {
+							spinFuels = append(spinFuels, "ELECTRICITY")
+						} else if strings.Contains(payload.Query, "fuelType: GAS") {
+							spinFuels = append(spinFuels, "GAS")
+						}
 						if !test.staleCount {
 							if strings.Contains(payload.Query, "fuelType: ELECTRICITY") {
 								if electricity <= 0 {
@@ -136,6 +142,9 @@ func TestRun(t *testing.T) {
 			}
 			if spinCount != test.wantSpins {
 				t.Fatalf("performed %d spins, want %d", spinCount, test.wantSpins)
+			}
+			if test.name == "limit spans both fuels" && (len(spinFuels) != 1 || spinFuels[0] != "ELECTRICITY") {
+				t.Fatalf("limited run used fuels %v; want one electricity spin and no gas spin", spinFuels)
 			}
 			if authentications != 1 {
 				t.Fatalf("authenticated %d times", authentications)
