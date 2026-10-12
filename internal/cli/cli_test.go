@@ -56,6 +56,11 @@ func testDependencies() (Dependencies, *int, *[]string) {
 			_, err := fmt.Fprintln(results, "scratchcard status result")
 			return err
 		},
+		RunScratchcardPlay: func(_ context.Context, _ *octopus.Client, account string, execute bool, results io.Writer) error {
+			calls = append(calls, "scratchcard-play:"+account+":"+boolString(execute))
+			_, err := fmt.Fprintln(results, "scratchcard play result")
+			return err
+		},
 	}
 	return deps, &loads, &calls
 }
@@ -80,6 +85,7 @@ func TestHelpAndVersionDoNotLoadConfiguration(t *testing.T) {
 		{name: "wheel group help", args: []string{"wheel"}, want: "history"},
 		{name: "scratchcard group help", args: []string{"scratchcard"}, want: "status"},
 		{name: "scratchcard status help", args: []string{"scratchcard", "status", "--help"}, want: "scratchcard status"},
+		{name: "scratchcard play help", args: []string{"scratchcard", "play", "--help"}, want: "[--execute]"},
 		{name: "wheel status help", args: []string{"wheel", "status", "--help"}, want: "wheel status"},
 		{name: "saving leaf help", args: []string{"saving-sessions", "join", "--help"}, want: "[--execute]"},
 		{name: "leaf help", args: []string{"wheel", "spin", "--help"}, want: "--max-spins"},
@@ -112,7 +118,8 @@ func TestInvalidCommandsFailBeforeConfiguration(t *testing.T) {
 		{"wheel", "status", "--execute"},
 		{"wheel", "status", "--fuel", "gas"},
 		{"scratchcard", "status", "--execute"},
-		{"scratchcard", "play"},
+		{"scratchcard", "play", "--unknown"},
+		{"scratchcard", "play", "argument"},
 		{"wheel", "spin", "--from", "2026-01-01"},
 		{"wheel", "history", "--execute"},
 		{"wheel", "history", "unexpected"},
@@ -156,6 +163,8 @@ func TestLeafRoutingAndDryRunDefaults(t *testing.T) {
 		{args: []string{"saving-sessions", "list"}, want: "list:A-TEST"},
 		{args: []string{"wheel", "status"}, want: "status:A-TEST"},
 		{args: []string{"scratchcard", "status"}, want: "scratchcard-status:A-TEST"},
+		{args: []string{"scratchcard", "play"}, want: "scratchcard-play:A-TEST:false"},
+		{args: []string{"scratchcard", "play", "--execute"}, want: "scratchcard-play:A-TEST:true"},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			deps, loads, calls := testDependencies()

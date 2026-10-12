@@ -28,6 +28,7 @@ type Dependencies struct {
 	RunHistory           func(context.Context, *octopus.Client, string, wheeloffortune.HistoryFilter, io.Writer) error
 	RunList              func(context.Context, *octopus.Client, string, io.Writer) error
 	RunScratchcardStatus func(context.Context, *octopus.Client, string, io.Writer) error
+	RunScratchcardPlay   func(context.Context, *octopus.Client, string, bool, io.Writer) error
 }
 
 func DefaultDependencies() Dependencies {
@@ -43,6 +44,7 @@ func DefaultDependencies() Dependencies {
 		RunHistory:           wheeloffortune.RunHistory,
 		RunList:              savingsessions.RunList,
 		RunScratchcardStatus: scratchcard.RunStatus,
+		RunScratchcardPlay:   scratchcard.RunPlay,
 	}
 }
 
@@ -131,7 +133,7 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 		}
 		return command{}, true, false, nil
 	}
-	if (group == "saving-sessions" && leaf != "join" && leaf != "list") || (group == "wheel" && leaf != "spin" && leaf != "history" && leaf != "status") || (group == "scratchcard" && leaf != "status") {
+	if (group == "saving-sessions" && leaf != "join" && leaf != "list") || (group == "wheel" && leaf != "spin" && leaf != "history" && leaf != "status") || (group == "scratchcard" && leaf != "status" && leaf != "play") {
 		return command{}, false, false, fmt.Errorf("unknown command %q under %q", leaf, group)
 	}
 
@@ -141,7 +143,7 @@ func parse(args []string, output io.Writer) (command, bool, bool, error) {
 	flags.Usage = func() { printLeafHelp(output, selected.path) }
 	var showHelp bool
 	flags.BoolVar(&showHelp, "help", false, "Show command help")
-	if leaf == "join" || leaf == "spin" {
+	if leaf == "join" || leaf == "spin" || (group == "scratchcard" && leaf == "play") {
 		flags.BoolVar(&selected.execute, "execute", false, "Perform account changes (default: dry run)")
 	}
 	if leaf == "spin" {
@@ -227,6 +229,8 @@ func execute(selected command, logger *slog.Logger, stdout io.Writer, deps Depen
 		return deps.RunList(ctx, client, appConfig.AccountNumber, stdout)
 	case "scratchcard status":
 		return deps.RunScratchcardStatus(ctx, client, appConfig.AccountNumber, stdout)
+	case "scratchcard play":
+		return deps.RunScratchcardPlay(ctx, client, appConfig.AccountNumber, selected.execute, stdout)
 	default:
 		return fmt.Errorf("unsupported command %q", selected.path)
 	}
@@ -243,7 +247,7 @@ func printRootHelp(output io.Writer) {
 	fmt.Fprintln(output, "\nCommands:")
 	fmt.Fprintln(output, "  saving-sessions  Saving Sessions commands")
 	fmt.Fprintln(output, "  wheel            Wheel of Fortune commands")
-	fmt.Fprintln(output, "  scratchcard      Scratchcard status")
+	fmt.Fprintln(output, "  scratchcard      Scratchcard commands")
 	fmt.Fprintln(output, "\nUse octo-cli <command> --help for command help.")
 	fmt.Fprintln(output, "Global flags: --help, --version")
 }
@@ -263,7 +267,7 @@ func printWheelHelp(output io.Writer) {
 
 func printScratchcardHelp(output io.Writer) {
 	fmt.Fprintln(output, "Usage: octo-cli scratchcard <command> [flags]")
-	fmt.Fprintln(output, "\nCommands:\n  status  Show the active Scratchcard session and card status")
+	fmt.Fprintln(output, "\nCommands:\n  status  Show the active Scratchcard session and card status\n  play    Preview or attempt a Scratchcard play")
 }
 
 func printLeafHelp(output io.Writer, path string) {
@@ -286,5 +290,8 @@ func printLeafHelp(output io.Writer, path string) {
 		fmt.Fprintln(output, "Usage: octo-cli wheel status")
 	case "scratchcard status":
 		fmt.Fprintln(output, "Usage: octo-cli scratchcard status")
+	case "scratchcard play":
+		fmt.Fprintln(output, "Usage: octo-cli scratchcard play [--execute]")
+		fmt.Fprintln(output, "\n--execute  Attempt one play (default: dry run; app-only participation condition applies)")
 	}
 }
